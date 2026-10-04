@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS `dash_agents` (
   `name` VARCHAR(12) NOT NULL,
   `active` TINYINT NOT NULL DEFAULT 1,
   `paused` TINYINT NOT NULL DEFAULT 0,
+  `sleeping` TINYINT NOT NULL DEFAULT 0,
+  `break_until` DATETIME NULL,
   `persona` TEXT NULL,
   `goal` TEXT NULL,
   `nudge` TEXT NULL,

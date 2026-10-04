@@ -113,6 +113,9 @@ table.kv td { white-space: normal; padding: 5px 8px; }
 .ev2.levelup .body b.k, .ev2.quest .body b.k { color: var(--ok); } .ev2.death .body b.k { color: var(--bad); }
 .agview.active { border-color: var(--accent); color: var(--accent); }
 .persona p { margin: 4px 0; }
+.journal-text { white-space: pre-wrap; font-family: Georgia, "Times New Roman", serif; font-size: 14px; line-height: 1.55; margin-top: 4px; }
+.jentry { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.minimap .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
 .help { white-space: pre-wrap; color: var(--muted); font-size: 12px; }
 td.wrap { white-space: normal; }
 a { color: var(--accent); }
@@ -202,6 +205,7 @@ a { color: var(--accent); }
           <div class="row" style="justify-content:space-between"><h3 style="margin:0">Life story</h3></div>
           <div class="chips" id="agdChips"></div>
           <div id="agdTimeline" class="story"></div>
+          <h3 style="margin-top:14px">Journal</h3><div id="agdJournal" class="story" style="max-height:420px"></div>
           <h3 style="margin-top:14px">Memories</h3><div id="agdMemories" class="story" style="max-height:260px"></div>
         </div>
       </div>
@@ -209,7 +213,7 @@ a { color: var(--accent); }
     </div>
     <div id="agLeaderView" style="display:none">
       <div class="card"><div class="tablewrap"><table id="agLeader"><thead><tr><th></th><th>Adventurer</th><th>Level</th><th>Zone</th>
-        <th>Quests</th><th>Deaths</th><th>Zones</th><th>Conversations</th><th>Gold</th><th>Item lvl</th><th>Played</th><th>Levels / h</th></tr></thead><tbody></tbody></table></div></div>
+        <th>Quests</th><th>Deaths</th><th>Zones</th><th>Conversations</th><th>Letters</th><th>Gold</th><th>Item lvl</th><th>Played</th><th>Levels / h</th></tr></thead><tbody></tbody></table></div></div>
       <div class="card"><h3>Levels of all adventurers over time</h3><div id="agAllChart"></div></div>
     </div>
   </section>
@@ -543,10 +547,14 @@ const KIND = {
   death: ['died', 'spell_shadow_soulgem'], group: ['party', 'achievement_guildperk_everybodysfriend'],
   goal: ['new goal', 'inv_scroll_03'], born: ['born', 'spell_holy_resurrection'], status: ['status', 'spell_nature_sleep'],
   nudge: ['nudge', 'ability_spy'], error: ['error', 'inv_misc_questionmark'], quest: ['quest', 'inv_misc_note_01'],
-  gear: ['gear', 'inv_chest_chain_05'], gold: ['gold', 'inv_misc_coin_01']};
-const CHIPS = [['', 'Everything'], ['diary,levelup,zone,death,group,goal,born,quest,gear,gold', 'Milestones'],
-  ['say,chat', 'Conversations'], ['thought', 'Thoughts'], ['quest', 'Quests'], ['levelup', 'Level-ups'],
-  ['zone', 'Travels'], ['death', 'Deaths'], ['group', 'Parties'], ['diary', 'Diary']];
+  gear: ['gear', 'inv_chest_chain_05'], gold: ['gold', 'inv_misc_coin_01'], journal: ['journal', 'inv_misc_book_11'],
+  sleep: ['logs off', 'spell_nature_sleep'], wake: ['logs on', 'spell_holy_borrowedtime'], break: ['break', 'inv_drink_04'],
+  convo: ['talked with', 'achievement_guildperk_everybodysfriend'], letter: ['letter', 'inv_letter_02'],
+  hobby: ['hobby', 'inv_fishingpole_02'], mount: ['mount', 'ability_mount_ridinghorse']};
+const CHIPS = [['', 'Everything'], ['diary,levelup,zone,death,group,goal,born,quest,gear,gold,journal,letter,mount,convo', 'Milestones'],
+  ['say,chat,convo', 'Conversations'], ['journal,diary', 'Journal'], ['letter', 'Letters'],
+  ['sleep,wake,break,hobby,mount', 'Daily life'], ['thought', 'Thoughts'], ['quest', 'Quests'], ['levelup', 'Level-ups'],
+  ['zone', 'Travels'], ['death', 'Deaths'], ['group', 'Parties']];
 const QCOLOR = ['#9d9d9d', '#ffffff', '#1eff00', '#0070dd', '#a335ee', '#ff8000', '#e6cc80', '#e6cc80'];
 const fmtDay = ts => new Date(ts.replace(' ', 'T')).toLocaleDateString(undefined, {weekday: 'long', month: 'short', day: 'numeric'});
 const fmtTime = ts => ts.slice(11, 16);
@@ -573,6 +581,12 @@ function evHtml(e, withName) {
   else if (e.kind === 'chat') {
     const m = e.text.match(/^(.*?): "(.*)" \/ replied: "(.*)"$/);
     body = m ? `<div><b>${esc(m[1])}</b> <span class="bubble">${esc(m[2])}</span></div><div style="margin-top:3px">↳ <span class="bubble">${esc(m[3])}</span></div>` : esc(e.text);
+  } else if (e.kind === 'convo') {
+    const m = e.text.match(/^Talked with (\S+): (.*)$/);
+    body = m ? `<b class="k">talked with ${esc(m[1])}</b>` + m[2].split(' / ').map(l => { const i = l.indexOf(': ');
+      return `<div style="margin-top:3px"><b>${esc(l.slice(0, i))}</b> <span class="bubble">${esc(l.slice(i + 2))}</span></div>`; }).join('') : esc(e.text);
+  } else if (e.kind === 'journal') {
+    body = `<b class="k">journal</b><div class="journal-text">${esc(e.text)}</div>`;
   } else if (e.kind === 'thought') {
     const [th, act] = e.text.split(' -> ');
     body = `${esc(th)}${act ? `<div class="meta" style="font-style:normal">→ ${esc(act)}</div>` : ''}`;
@@ -606,7 +620,8 @@ async function loadAgents() {
     : 'Resting: the world server is stopped (it stops after an hour without players and starts on the next login).';
   $('#agCards').innerHTML = agents.map(a => {
     const st = a.state || {}, xp = st.xpnext ? Math.round(st.xp / st.xpnext * 100) : 0;
-    const status = !st.online ? 'offline' : !st.alive ? '💀 dead' : st.combat ? '⚔ fighting' : esc(st.area_name || st.zone_name || '');
+    const status = a.sleeping ? '😴 asleep (logged off)' : a.break_until ? '☕ on a break' : !st.online ? 'offline'
+      : !st.alive ? '💀 dead' : st.combat ? '⚔ fighting' : esc(st.area_name || st.zone_name || '');
     return `<div class="agent ${agSel === a.guid ? 'sel' : ''}" style="--cc:${a.visual.color}" onclick="selectAgent(${a.guid})">
       <div class="row" style="gap:12px;align-items:center">${portrait(a)}
         <div style="min-width:0;flex:1"><div class="nm">${esc(a.name)}${a.paused ? ' <span class="tag">paused</span>' : ''}</div>
@@ -614,7 +629,7 @@ async function loadAgents() {
           <div class="muted" style="font-size:12px">${status}</div></div></div>
       <div class="bar2" title="Health ${st.hp ?? 0}%"><div class="hp" style="width:${st.online ? st.hp : 0}%"></div></div>
       <div class="bar2" title="Experience ${xp}%"><div class="xp" style="width:${xp}%"></div></div>
-      <div class="minimap">${mapHtml(a, false)}</div>
+      <div class="minimap">${a.sleeping ? '<div class="empty">Asleep</div>' : mapHtml(a, false)}</div>
       <div style="font-size:12px;margin-top:8px"><b>Goal:</b> ${esc(a.goal || '…')}</div>
       <div class="thought">${esc(a.last_thought || 'Not awake yet.')}</div></div>`;
   }).join('');
@@ -651,8 +666,15 @@ async function renderAgent() {
     .map(([l, v]) => `<div class="stat"><b>${v ?? 0}</b><span>${l}</span></div>`).join('');
   $('#agdPause').textContent = a.paused ? 'Resume' : 'Pause';
   $('#agdQuests').innerHTML = (st.quests || []).map(q => `<div>${esc(q.replace(' [done]', ''))} ${q.endsWith('[done]') ? '<span class="tag" style="color:var(--ok)">ready to turn in</span>' : ''}</div>`).join('') || '<div class="muted">Empty quest log.</div>';
+  const sch = p.schedule;
   $('#agdPersona').innerHTML = p.personality ? `<p>${esc(p.personality)}</p><p class="muted">${esc(p.background || '')}</p>
-    <p><b>Ambition:</b> ${esc(p.ambition || '')}</p><p><b>Quirk:</b> ${esc(p.quirks || '')}</p><p><b>Current goal:</b> ${esc(a.goal || '')}</p>
+    <p><b>Ambition:</b> ${esc(p.ambition || '')}</p>${p.dream ? `<p><b>Dream:</b> ${esc(p.dream)}</p>` : ''}
+    <p><b>Quirk:</b> ${esc(p.quirks || '')}</p><p><b>Current goal:</b> ${esc(a.goal || '')}</p>
+    ${sch ? `<p><b>Plays:</b> ${String(sch.wake).padStart(2, '0')}:00-${String(sch.sleep).padStart(2, '0')}:00 (${esc(sch.type)})${a.sleeping ? ' · <b>asleep now</b>' : ''}</p>` : ''}
+    ${p.hobbies?.length ? `<p><b>Hobbies:</b> ${esc(p.hobbies.join(', '))}</p>` : ''}
+    ${p.chat_style ? `<p><b>Types like:</b> <span class="muted">${esc(p.chat_style)}</span></p>` : ''}
+    ${p.mood ? `<p><b>Mood:</b> ${esc(p.mood)}</p>` : ''}
+    ${p.growth?.length ? `<p><b>How they've changed:</b> ${esc(p.growth.slice(-3).join(' '))}</p>` : ''}
     ${a.nudge ? `<p><b>Pending nudge:</b> ${esc(a.nudge)}</p>` : ''}<p class="muted"><b>Last action:</b> ${esc(a.last_action || '')}</p>`
     : '<p class="muted">Not born yet: the first thought creates their persona.</p>';
   $('#agdMapTitle').textContent = a.map ? `Map: ${a.map.name}` : 'Map';
@@ -663,6 +685,9 @@ async function renderAgent() {
     api(`/api/agents/feed?guid=${a.guid}&limit=300&kinds=${encodeURIComponent(agStoryKinds)}`),
     api(`/api/agents/${a.guid}/memories`), api(`/api/agents/${a.guid}/sheet`)]);
   $('#agdTimeline').innerHTML = storyHtml(ev, false);
+  const jr = await api(`/api/agents/feed?guid=${a.guid}&limit=30&kinds=journal`);
+  $('#agdJournal').innerHTML = jr.map(j => `<div class="jentry"><div class="day" style="position:static">${esc(fmtDay(j.ts))} · level ${j.level ?? '?'}</div><div class="journal-text">${esc(j.text)}</div></div>`).join('')
+    || '<div class="muted">The first entry is written when they log off for the night.</div>';
   $('#agdMemories').innerHTML = mem.map(m => `<div class="ev2"><span class="tag" style="flex:none">${m.importance}/10</span><div class="body">${esc(m.text)}${m.about ? ` <span class="muted">(${esc(m.about)})</span>` : ''}<div class="meta">${esc(m.ts)}</div></div></div>`).join('') || '<div class="muted">No memories yet.</div>';
   const bySlot = Object.fromEntries((sheet.equipment || []).map(g => [g.slot_id, g]));
   const order = [0, 9, 1, 5, 2, 6, 14, 7, 4, 10, 3, 11, 18, 12, 8, 13, 15, 16, 17];
@@ -680,7 +705,7 @@ function renderLeader() {
     const lph = st.played_h ? (Math.max(0, (st.level || 1) - 1) / st.played_h).toFixed(1) : '–';
     return `<tr style="cursor:pointer" onclick="agView='board';document.querySelector('.agview[data-view=board]').click();selectAgent(${a.guid})">
       <td>${i + 1}</td><td><div class="row" style="gap:10px">${portrait(a)}<div><b style="color:${a.visual.color}">${esc(a.name)}</b><div class="muted" style="font-size:12px">${esc(st.race || '')} ${esc(st.class || '')}</div></div></div></td>
-      <td><b>${st.level || '–'}</b></td><td>${esc(st.zone_name || '–')}</td><td>${s.quests}</td><td>${s.deaths}</td><td>${s.zones}</td><td>${s.chats}</td>
+      <td><b>${st.level || '–'}</b></td><td>${esc(st.zone_name || '–')}</td><td>${s.quests}</td><td>${s.deaths}</td><td>${s.zones}</td><td>${s.chats + (s.convos || 0)}</td><td>${s.letters || 0}</td>
       <td>${st.gold ?? '–'}</td><td>${st.ilvl ?? '–'}</td><td>${st.played_h ?? 0} h</td><td>${lph}</td></tr>`; }).join('');
   $('#agAllChart').innerHTML = levelChart(agents.map(a => ({hist: a.level_history, color: a.visual.color, label: a.name})), 900);
 }

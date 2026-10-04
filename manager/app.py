@@ -1358,8 +1358,9 @@ def _iso(v):
 @app.get("/api/agents")
 @requires_auth
 def api_agents():
-    rows = query("SELECT guid, name, active, paused, persona, goal, nudge, last_thought, last_action, last_think, "
-                 "born_at, born_played FROM acore_characters.dash_agents WHERE active = 1 ORDER BY name")
+    rows = query("SELECT guid, name, active, paused, sleeping, break_until, persona, goal, nudge, last_thought, "
+                 "last_action, last_think, born_at, born_played FROM acore_characters.dash_agents WHERE active = 1 "
+                 "ORDER BY name")
     levels = query("SELECT guid, ts, level FROM acore_characters.dash_agent_events WHERE kind IN ('levelup','born') "
                    "ORDER BY id")
     history = {}
@@ -1396,7 +1397,8 @@ def api_agents():
         c = counts.get(r["guid"], {})
         stats = {"quests": c.get("quest", 0), "deaths": c.get("death", 0), "zones": c.get("zone", 0),
                  "levelups": c.get("levelup", 0), "chats": c.get("chat", 0) + c.get("say", 0),
-                 "thoughts": c.get("thought", 0)}
+                 "thoughts": c.get("thought", 0), "letters": c.get("letter", 0), "journals": c.get("journal", 0),
+                 "convos": c.get("convo", 0)}
         out.append({**{k: _iso(v) for k, v in r.items() if k != "persona"}, "persona": persona, "state": st,
                     "visual": visual, "map": mp, "stats": stats, "level_history": history.get(r["guid"], [])})
     return jsonify(enabled=agent_runner.enabled(), awake=bool(agent_runner.world_awake), agents=out)

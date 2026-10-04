@@ -11,11 +11,13 @@
 
 #include "CellImpl.h"
 #include "Chat.h"
+#include "CharacterCache.h"
 #include "CommandScript.h"
 #include "DatabaseEnv.h"
 #include "GameTime.h"
 #include "Group.h"
 #include "GroupMgr.h"
+#include "Mail.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
 #include "Player.h"
@@ -27,6 +29,7 @@
 #include "WorldPacket.h"
 #include "WorldSession.h"
 
+#include <map>
 #include <set>
 #include <sstream>
 #include <string>
@@ -39,17 +42,26 @@ namespace
     constexpr uint32 PIN_SECONDS = 365 * 24 * 3600;     // "never" for the random bot manager
     constexpr uint32 REFRESH_MS = 5 * 60 * 1000;         // re-pin every few minutes
 
+    constexpr uint32 SLEEP_CHECK_MS = 60 * 1000;         // keep sleeping agents logged out
+
     std::set<uint32> g_agents;                           // guid counters from characters.dash_agents
+    std::set<uint32> g_sleeping;                         // agents that are "asleep" (logged off by choice)
     uint32 g_refreshTimer = 0;
+    uint32 g_sleepTimer = 0;
 
     void LoadAgents()
     {
         g_agents.clear();
-        if (QueryResult result = CharacterDatabase.Query("SELECT guid FROM dash_agents WHERE active = 1"))
+        g_sleeping.clear();
+        if (QueryResult result = CharacterDatabase.Query("SELECT guid, sleeping FROM dash_agents WHERE active = 1"))
         {
             do
-                g_agents.insert(result->Fetch()[0].Get<uint32>());
-            while (result->NextRow());
+            {
+                Field* f = result->Fetch();
+                g_agents.insert(f[0].Get<uint32>());
+                if (f[1].Get<uint8>())
+                    g_sleeping.insert(f[0].Get<uint32>());
+            } while (result->NextRow());
         }
     }
 
@@ -61,11 +73,37 @@ namespace
             sRandomPlayerbotMgr.SetBotEventValue(guid, ev, 1, PIN_SECONDS);
     }
 
+    // Asleep: out of the random bot manager's active set, so it logs the bot out and leaves it out.
+    void Unpin(uint32 guid)
+    {
+        for (char const* ev : { "add", "logout" })
+            sRandomPlayerbotMgr.SetBotEventValue(guid, ev, 0, 0);
+    }
+
     void PinAll()
     {
         LoadAgents();
         for (uint32 guid : g_agents)
-            Pin(guid);
+        {
+            if (g_sleeping.count(guid))
+                Unpin(guid);
+            else
+                Pin(guid);
+        }
+    }
+
+    // The random bot manager may still pick a sleeping agent to fill its quota; send it back to bed.
+    void EnforceSleep()
+    {
+        for (uint32 guid : g_sleeping)
+        {
+            ObjectGuid og = ObjectGuid::Create<HighGuid::Player>(guid);
+            if (ObjectAccessor::FindConnectedPlayer(og))
+            {
+                Unpin(guid);
+                sRandomPlayerbotMgr.LogoutPlayerBot(og);
+            }
+        }
     }
 
     bool IsAgent(Player* player)
@@ -164,6 +202,14 @@ public:
         }
         else
             g_refreshTimer -= diff;
+
+        if (g_sleepTimer <= diff)
+        {
+            EnforceSleep();
+            g_sleepTimer = SLEEP_CHECK_MS;
+        }
+        else
+            g_sleepTimer -= diff;
     }
 };
 
@@ -203,6 +249,12 @@ public:
             { "invite",    HandleInvite,    SEC_ADMINISTRATOR, Console::Yes },
             { "groupwith", HandleGroupWith, SEC_ADMINISTRATOR, Console::Yes },
             { "leave",     HandleLeave,     SEC_ADMINISTRATOR, Console::Yes },
+            { "sleep",     HandleSleep,     SEC_ADMINISTRATOR, Console::Yes },
+            { "wake",      HandleWake,      SEC_ADMINISTRATOR, Console::Yes },
+            { "rest",      HandleRest,      SEC_ADMINISTRATOR, Console::Yes },
+            { "mail",      HandleMail,      SEC_ADMINISTRATOR, Console::Yes },
+            { "buymount",  HandleBuyMount,  SEC_ADMINISTRATOR, Console::Yes },
+            { "do",        HandleDo,        SEC_ADMINISTRATOR, Console::Yes },
         };
         static ChatCommandTable dashTable = { { "agent", agentTable }, { "reroll", HandleReroll, SEC_ADMINISTRATOR, Console::Yes } };
         static ChatCommandTable root = { { "dash", dashTable } };
@@ -270,6 +322,8 @@ public:
         kv("ilvl", uint32(p->GetAverageItemLevel()));
         kv("played", p->GetTotalPlayedTime());
         kv("agent", IsAgent(p) ? 1 : 0);
+        kv("riding", p->HasSpell(33391) ? 2 : p->HasSpell(33388) ? 1 : 0);
+        kv("sitting", p->IsSitState() ? 1 : 0);
 
         std::string group;
         if (Group* g = p->GetGroup())
@@ -547,6 +601,193 @@ public:
         }
         handler->PSendSysMessage("{} and {} team up.", p->GetName(), o->GetName());
         return true;
+    }
+
+    // .dash agent sleep <name> -- log off for the night (the dashboard sets dash_agents.sleeping first)
+    static bool HandleSleep(ChatHandler* handler, char const* args)
+    {
+        std::vector<std::string> a = Split(args);
+        if (a.size() != 1)
+            return false;
+        LoadAgents();
+        std::string name = a[0];
+        if (!normalizePlayerName(name))
+            return false;
+        Player* p = ObjectAccessor::FindPlayerByName(name);
+        if (!p)
+        {
+            handler->PSendSysMessage("{} is already offline.", name);
+            return true;
+        }
+        if (p->GetGroup())
+            p->RemoveFromGroup();
+        p->SaveToDB(false, false);
+        Unpin(p->GetGUID().GetCounter());
+        sRandomPlayerbotMgr.LogoutPlayerBot(p->GetGUID());
+        handler->PSendSysMessage("{} logs off for some sleep.", name);
+        return true;
+    }
+
+    // .dash agent wake <name> -- log back in (the dashboard clears dash_agents.sleeping first)
+    static bool HandleWake(ChatHandler* handler, char const* args)
+    {
+        std::vector<std::string> a = Split(args);
+        if (a.size() != 1)
+            return false;
+        LoadAgents();
+        std::string name = a[0];
+        if (!normalizePlayerName(name))
+            return false;
+        if (ObjectAccessor::FindPlayerByName(name))
+        {
+            handler->PSendSysMessage("{} is already online.", name);
+            return true;
+        }
+        ObjectGuid guid = sCharacterCache->GetCharacterGuidByName(name);
+        if (!guid || !g_agents.count(guid.GetCounter()))
+        {
+            handler->SendErrorMessage("{} is not an agent.", name);
+            return false;
+        }
+        Pin(guid.GetCounter());
+        sRandomPlayerbotMgr.AddPlayerBot(guid, 0);
+        handler->PSendSysMessage("{} logs in.", name);
+        return true;
+    }
+
+    // .dash agent rest <name> on|off -- take a break: stay put and sit down
+    static bool HandleRest(ChatHandler* handler, char const* args)
+    {
+        std::vector<std::string> a = Split(args);
+        if (a.size() != 2 || (a[1] != "on" && a[1] != "off"))
+            return false;
+        Player* p = Agent(handler, a[0]);
+        if (!p)
+            return false;
+        PlayerbotAI* ai = GET_PLAYERBOT_AI(p);
+        if (a[1] == "on")
+        {
+            ai->ChangeStrategy("+stay,-new rpg,-grind", BOT_STATE_NON_COMBAT);
+            p->StopMoving();
+            p->SetStandState(UNIT_STAND_STATE_SIT);
+            handler->PSendSysMessage("{} takes a break.", p->GetName());
+        }
+        else
+        {
+            p->SetStandState(UNIT_STAND_STATE_STAND);
+            ai->ChangeStrategy("-stay,+new rpg", BOT_STATE_NON_COMBAT);
+            handler->PSendSysMessage("{} is back from their break.", p->GetName());
+        }
+        return true;
+    }
+
+    // .dash agent mail <agent> <recipient> <copper> <subject>|<body>
+    static bool HandleMail(ChatHandler* handler, char const* args)
+    {
+        std::vector<std::string> a = Split(args);
+        if (a.size() < 4)
+            return false;
+        Player* p = Agent(handler, a[0]);
+        if (!p)
+            return false;
+        std::string to = a[1];
+        if (!normalizePlayerName(to))
+            return false;
+        ObjectGuid toGuid = sCharacterCache->GetCharacterGuidByName(to);
+        if (!toGuid)
+        {
+            handler->SendErrorMessage("No character named {}.", to);
+            return false;
+        }
+        uint32 copper = static_cast<uint32>(std::stoul(a[2]));
+        if (copper > p->GetMoney())
+            copper = p->GetMoney();
+        std::string text = Rest(a, 3);
+        size_t bar = text.find('|');
+        std::string subject = bar == std::string::npos ? "A letter" : text.substr(0, bar);
+        std::string body = bar == std::string::npos ? text : text.substr(bar + 1);
+        if (subject.size() > 60)
+            subject.resize(60);
+
+        CharacterDatabaseTransaction trans = CharacterDatabase.BeginTransaction();
+        MailDraft draft(subject, body);
+        if (copper)
+        {
+            p->ModifyMoney(-static_cast<int32>(copper));
+            draft.AddMoney(copper);
+        }
+        draft.SendMailTo(trans, MailReceiver(ObjectAccessor::FindConnectedPlayer(toGuid), toGuid.GetCounter()),
+                         MailSender(p), MAIL_CHECK_MASK_COPIED);
+        CharacterDatabase.CommitTransaction(trans);
+        p->SaveToDB(false, false);
+        handler->PSendSysMessage("{} mailed {} ({} copper).", p->GetName(), to, copper);
+        return true;
+    }
+
+    // .dash agent buymount <name> -- riding training and a racial mount, paid from the agent's gold
+    static bool HandleBuyMount(ChatHandler* handler, char const* args)
+    {
+        std::vector<std::string> a = Split(args);
+        if (a.size() != 1)
+            return false;
+        Player* p = Agent(handler, a[0]);
+        if (!p)
+            return false;
+
+        //                        race: riding mount (20)      epic mount (40)
+        static std::map<uint8, std::pair<uint32, uint32>> const mounts = {
+            { 1, { 458, 23229 } }, { 3, { 6898, 23238 } }, { 4, { 8394, 23221 } }, { 7, { 10873, 23225 } },
+            { 11, { 34406, 35713 } }, { 2, { 580, 23250 } }, { 5, { 64977, 17465 } }, { 6, { 18990, 23249 } },
+            { 8, { 10796, 23241 } }, { 10, { 35020, 35025 } } };
+        auto it = mounts.find(p->getRace());
+        if (it == mounts.end())
+            return false;
+
+        uint32 riding, mount, cost;
+        if (p->GetLevel() >= 40 && !p->HasSpell(33391))
+        {
+            riding = 33391; mount = it->second.second; cost = 600000;   // 50g training + 10g mount
+        }
+        else if (p->GetLevel() >= 20 && !p->HasSpell(33388))
+        {
+            riding = 33388; mount = it->second.first; cost = 50000;     // 4g training + 1g mount
+        }
+        else
+        {
+            handler->SendErrorMessage("{} has nothing new to buy (level {}).", p->GetName(), p->GetLevel());
+            return false;
+        }
+        if (p->GetMoney() < cost)
+        {
+            handler->SendErrorMessage("{} needs {} gold (has {}).", p->GetName(), cost / 10000, p->GetMoney() / 10000);
+            return false;
+        }
+        p->ModifyMoney(-static_cast<int32>(cost));
+        p->learnSpell(riding);
+        p->learnSpell(mount);
+        p->SaveToDB(false, false);
+        handler->PSendSysMessage("{} bought riding training and a mount for {} gold.", p->GetName(), cost / 10000);
+        return true;
+    }
+
+    // .dash agent do <name> <action> -- a whitelisted playerbots action
+    static bool HandleDo(ChatHandler* handler, char const* args)
+    {
+        std::vector<std::string> a = Split(args);
+        if (a.size() < 2)
+            return false;
+        Player* p = Agent(handler, a[0]);
+        if (!p || Busy(handler, p))
+            return false;
+        std::string action = Rest(a, 1);
+        if (action != "go fishing")
+        {
+            handler->SendErrorMessage("Action not allowed.");
+            return false;
+        }
+        bool ok = GET_PLAYERBOT_AI(p)->DoSpecificAction(action, Event(), true);
+        handler->PSendSysMessage(ok ? "{} starts: {}." : "{} could not: {}.", p->GetName(), action);
+        return ok;
     }
 
     // .dash agent leave <name>

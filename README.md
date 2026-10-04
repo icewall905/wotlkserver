@@ -8,9 +8,11 @@
 > patches. AzerothCore is licensed under the GNU GPL v2 (see `LICENSE`), and so is this fork.
 > Upstream changes are merged from the Playerbot branch.
 
-This repository is the setup for a small private server: about 1000 playerbots, AI chat through an
-OpenAI-compatible LLM endpoint, five **LLM agents** that live whole lives in the game, and a web
-dashboard to run all of it.
+**Why this fork exists:** it is a playground for new AI features on top of AzerothCore and a web UI to
+run and watch them. It powers a small family server: about 1000 playerbots, AI chat through an
+OpenAI-compatible LLM endpoint, five **LLM agents** that live whole, human-like lives in the game
+(levelling 1 to 80, keeping a daily routine, writing a journal, making friends, sending letters), and a
+web dashboard to manage the server and follow the agents' adventures.
 
 ## What is here
 
@@ -74,6 +76,22 @@ Everything is recorded in `dash_agent_events` and `dash_agent_memories` and show
 Agents tab: persona, level chart, life story (thoughts, conversations, quests, level-ups,
 travel, deaths, parties, gear, gold) and memories. From there you can pause an agent, make it
 think now, nudge it with a suggestion, or start a new life.
+
+To feel human, each agent also has:
+
+- **One personality everywhere.** Its persona, chat style, mood, goal and key memories are written into
+  the chat module's personality for that bot, so it is the same person when family members talk to it.
+- **A daily routine.** A schedule from its persona (early bird, night owl...) with some day-to-day
+  variation, in the host's local time: it logs off at bedtime with a goodnight and back on in the
+  morning, and takes breaks (sitting down at an inn) when it has played for a while.
+- **A journal.** Before logging off it reflects on its day: a diary entry, its mood, how it has changed,
+  tomorrow's goal and how it feels about the people it met. The personality grows over time.
+- **Friends among the agents.** Agents who meet have real back-and-forth conversations (spoken in game)
+  and remember each other.
+- **Letters.** It may mail personal letters, sometimes with a little gold, to real players it knows.
+- **Hobbies and ambitions.** Sightseeing trips to famous places, fishing, saving up for its riding
+  training and mount at level 20 and its epic mount at 40.
+- **Its own chat style**, used for everything it says and writes.
 
 Agents live whenever the world server runs, with or without players. The idle manager
 (`server_manager.sh`, installed as `ac-manager.service`) stops the world server after 60 minutes

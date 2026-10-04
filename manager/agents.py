@@ -8,6 +8,7 @@ watched in the dashboard.
 """
 import collections
 import json
+import zlib
 import random
 import re
 import threading
@@ -20,6 +21,21 @@ INVITE_COOLDOWN = 30 * 60            # per agent and target player
 GOTO_COOLDOWN = 45 * 60              # per agent and target player
 TRAVEL_COOLDOWN = 20 * 60            # per agent
 MAX_MEMORIES = 60
+LETTER_TARGET_COOLDOWN = 6 * 3600
+LETTER_AGENT_COOLDOWN = 3 * 3600
+CONVO_PAIR_COOLDOWN = 30 * 60
+SIGHTSEE_COOLDOWN = 60 * 60
+FISH_COOLDOWN = 30 * 60
+
+# Places worth a sightseeing trip: (label, min level, faction A/H/B, game_tele name)
+LANDMARKS = [
+    ("Stormwind City", 1, "A", "Stormwind"), ("Ironforge", 1, "A", "Ironforge"), ("Darnassus", 1, "A", "Darnassus"),
+    ("The Exodar", 1, "A", "TheExodar"), ("Goldshire inn", 1, "A", "Goldshire"), ("Menethil Harbor", 15, "A", "MenethilHarbor"),
+    ("Orgrimmar", 1, "H", "Orgrimmar"), ("Undercity", 1, "H", "Undercity"), ("Thunder Bluff", 1, "H", "ThunderBluff"),
+    ("Silvermoon City", 1, "H", "SilvermoonCity"), ("Booty Bay", 30, "B", "BootyBay"), ("Gadgetzan", 40, "B", "Gadgetzan"),
+    ("Ratchet", 12, "B", "Ratchet"), ("Moonglade", 15, "B", "Moonglade"), ("Shattrath City", 58, "B", "Shattrath"),
+    ("Dalaran", 68, "B", "Dalaran"),
+]
 
 # (label, min level, max level, faction A/H/B, game_tele name)
 ZONES = [
@@ -63,7 +79,13 @@ ACTIONS_DOC = """Choose exactly one action:
 - {"type":"invite","name":"<real player nearby, same faction>"}  invite a real player to adventure together
 - {"type":"whisper","name":"<player>","text":"..."}  send a private message
 - {"type":"group_with","name":"<other agent, same faction>"}  team up with a fellow agent
-- {"type":"leave_group"}  go your own way again"""
+- {"type":"leave_group"}  go your own way again
+- {"type":"seek_agent","name":"<other agent>"}  go and find a fellow agent you want to see
+- {"type":"take_break","minutes":5-30}  step away for a bit: sit down, grab a snack, stretch (only when you've played a while)
+- {"type":"send_letter","name":"<a real player you know>","subject":"...","text":"...","gold":0-5}  mail a personal letter, optionally with a little gold
+- {"type":"sightsee","place":<id from LANDMARKS>}  visit a famous place just because you want to
+- {"type":"go_fishing"}  relax with a fishing rod (if you like fishing)
+- {"type":"buy_mount"}  buy riding training and your first (level 20) or epic (level 40) mount, if you can afford it"""
 
 
 def _strip(text, n):
@@ -90,6 +112,11 @@ class AgentRunner:
         self.zone_ids = {}
         self.last_chat = {}
         self.world_awake = None
+        self.landmark_ids = {}
+        self.talking = set()              # agent names currently in a conversation
+        self.just_woke = set()
+        self.reload_chat_due = False
+        self.last_chat_reload = 0
         self.trails = collections.defaultdict(lambda: collections.deque(maxlen=120))   # guid -> (ts, zone, x, y)
 
     # ------------------------------------------------------------------ helpers
@@ -132,6 +159,9 @@ class AgentRunner:
         for i, (label, lo, hi, fac, tele) in enumerate(ZONES):
             if tele.lower() in by_name:
                 self.zone_ids[i] = by_name[tele.lower()]
+        for i, (label, lo, fac, tele) in enumerate(LANDMARKS):
+            if tele.lower() in by_name:
+                self.landmark_ids[i] = by_name[tele.lower()]
 
     def locations_for(self, level, faction):
         fac = "A" if faction == "Alliance" else "H"
@@ -163,7 +193,7 @@ class AgentRunner:
             "map_name": self.map_name(num("map")), "hp": num("hp"), "alive": st.get("alive") == "1",
             "combat": st.get("combat") == "1", "gold": num("money") // 10000, "freebag": num("freebag"),
             "ilvl": num("ilvl"), "played_s": num("played"), "played_h": round(num("played") / 3600, 1),
-            "map": num("map"), "area_id": num("area"),
+            "map": num("map"), "area_id": num("area"), "riding": num("riding"), "sitting": st.get("sitting") == "1",
             "x": float((st.get("pos") or "0,0,0").split(",")[0]), "y": float((st.get("pos") or "0,0,0").split(",")[1]),
             "group": [g for g in st.get("group", "").split(",") if g],
             "quests": [q for q in st.get("quests", "").split("|") if q],
@@ -255,6 +285,231 @@ class AgentRunner:
         self.remember(agent["guid"], f"My ambition: {persona.get('ambition', '')}", 9)
         return persona
 
+    def upgrade_persona(self, agent, state, persona):
+        """Add the traits that make an agent feel human: chat style, daily schedule, hobbies."""
+        if all(k in persona for k in ("chat_style", "schedule", "hobbies")):
+            return persona
+        prompt = (f"Here is a World of Warcraft character: {json.dumps(persona)}. Name {agent['name']}, "
+                  f"{state['race']} {state['class']}. Add human details as JSON with keys: "
+                  "chat_style (how this person types in game chat: capitalisation, slang like lol/brb/ty, emotes, "
+                  "typos, sentence length; be specific and consistent with the personality), "
+                  "schedule ({\"type\": \"early bird\"|\"night owl\"|\"steady\", \"wake\": hour 0-23 when they "
+                  "usually log on, \"sleep\": hour 0-23 when they usually log off; play 12-16 hours a day}), "
+                  "hobbies (2-3 things they enjoy besides levelling, from: fishing, sightseeing, collecting gear, "
+                  "making friends, writing letters, exploring, duelling, helping newbies), "
+                  "dream (a big long-term dream in Azeroth).")
+        extra = self.llm([{"role": "user", "content": prompt}], 400)
+        sched = extra.get("schedule") or {}
+        try:
+            sched = {"type": str(sched.get("type", "steady")), "wake": int(sched.get("wake", 8)) % 24,
+                     "sleep": int(sched.get("sleep", 23)) % 24}
+        except (TypeError, ValueError):
+            sched = {"type": "steady", "wake": 8, "sleep": 23}
+        persona.update({"chat_style": _strip(extra.get("chat_style"), 300) or "casual, normal capitalisation",
+                        "schedule": sched,
+                        "hobbies": [_strip(h, 30) for h in (extra.get("hobbies") or [])][:3],
+                        "dream": _strip(extra.get("dream"), 200)})
+        self.execute("UPDATE acore_characters.dash_agents SET persona = %s WHERE guid = %s",
+                     (json.dumps(persona), agent["guid"]))
+        self.event(agent["guid"], "status", f"{agent['name']} plays {sched['wake']:02d}:00-{sched['sleep']:02d}:00 "
+                                             f"({sched['type']}), enjoys {', '.join(persona['hobbies'])}. "
+                                             f"Types like: {persona['chat_style']}", state)
+        self.sync_chat_persona(agent, persona)
+        return persona
+
+    def sync_chat_persona(self, agent, persona):
+        """Give the chat module (which answers when people talk to a bot) this agent's real persona."""
+        guid, name = agent["guid"], agent["name"]
+        mems = self.query("SELECT text FROM acore_characters.dash_agent_memories WHERE guid = %s "
+                          "ORDER BY importance DESC, ts DESC LIMIT 8", (guid,))
+        goal = self.query("SELECT goal FROM acore_characters.dash_agents WHERE guid = %s", (guid,))
+        prompt = (f"You are {name}. Personality: {persona.get('personality', '')} Background: "
+                  f"{persona.get('background', '')} Quirk: {persona.get('quirks', '')} "
+                  f"Dream: {persona.get('dream', '')} Current goal: {(goal[0]['goal'] if goal else '') or ''}. "
+                  f"Mood lately: {persona.get('mood', 'fine')}. "
+                  + (f"How you have changed: {' '.join(persona.get('growth', [])[-2:])} " if persona.get("growth") else "")
+                  + f"You type in chat like this: {persona.get('chat_style', 'casual')}. "
+                  f"Things you remember: {' | '.join(m['text'] for m in mems)}. Stay this person in every reply.")
+        key = f"AGENT_{name.upper()}"
+        self.execute("REPLACE INTO acore_characters.mod_ollama_chat_personality_templates (`key`, prompt, manual_only) "
+                     "VALUES (%s, %s, 1)", (key, _strip(prompt, 3000)))
+        self.execute("REPLACE INTO acore_characters.mod_ollama_chat_personality (guid, personality) VALUES (%s, %s)",
+                     (guid, key))
+        self.reload_chat_due = True
+
+    def local_hour(self):
+        t = time.localtime()
+        return t.tm_hour + t.tm_min / 60.0
+
+    def awake_window(self, guid, persona):
+        """Today's log-on/log-off hours, with up to +-40 minutes of day-to-day variation."""
+        sched = persona.get("schedule") or {"wake": 8, "sleep": 23}
+        day = time.strftime("%Y%m%d")
+        jitter = lambda salt: ((zlib.crc32(f"{day}:{guid}:{salt}".encode()) % 81) - 40) / 60.0
+        return (sched["wake"] + jitter("w")) % 24, (sched["sleep"] + jitter("s")) % 24
+
+    def should_be_awake(self, guid, persona):
+        if "schedule" not in persona:
+            return True
+        wake, sleep = self.awake_window(guid, persona)
+        h = self.local_hour()
+        return (wake <= h < sleep) if wake < sleep else (h >= wake or h < sleep)
+
+    def say(self, agent, state, text):
+        text = _strip(text, 200)
+        if text and state.get("online") and state.get("alive"):
+            self.soap(f"dash agent say {agent['name']} {text}")
+            self.event(agent["guid"], "say", text, state)
+
+    def go_to_sleep(self, agent, state, persona):
+        name, guid = agent["name"], agent["guid"]
+        parting = None
+        try:
+            parting = self.reflect(agent, state, persona)
+        except Exception as e:
+            self.app.logger.warning("reflect %s: %s", name, e)
+        if parting:
+            self.say(agent, state, parting)
+            time.sleep(4)
+        self.execute("UPDATE acore_characters.dash_agents SET sleeping = 1, break_until = NULL WHERE guid = %s", (guid,))
+        self.soap("dash agent reload")
+        self.soap(f"dash agent sleep {name}")
+        wake, _ = self.awake_window(guid, persona)
+        self.event(guid, "sleep", f"{name} logs off for the night (back around {int(wake):02d}:{int(wake % 1 * 60):02d}).", state)
+
+    def wake_up(self, agent, persona):
+        name, guid = agent["name"], agent["guid"]
+        self.execute("UPDATE acore_characters.dash_agents SET sleeping = 0 WHERE guid = %s", (guid,))
+        self.soap("dash agent reload")
+        self.soap(f"dash agent wake {name}")
+        self.event(guid, "wake", f"{name} logs on for the day.")
+        self.just_woke.add(guid)
+        self.next_think[guid] = time.monotonic() + 45
+
+    def reflect(self, agent, state, persona):
+        """End-of-day reflection: journal, mood, growth, opinions; returns a goodnight line."""
+        guid, name = agent["guid"], agent["name"]
+        since = self.query("SELECT MAX(ts) AS t FROM acore_characters.dash_agent_events WHERE guid = %s AND kind = 'journal'",
+                           (guid,))[0]["t"]
+        rows = self.query("SELECT ts, kind, text FROM acore_characters.dash_agent_events WHERE guid = %s "
+                          "AND kind NOT IN ('status','error','thought') AND ts > COALESCE(%s, NOW() - INTERVAL 1 DAY) "
+                          "ORDER BY id DESC LIMIT 70", (guid, since))
+        thoughts = self.query("SELECT text FROM acore_characters.dash_agent_events WHERE guid = %s AND kind = 'thought' "
+                              "ORDER BY id DESC LIMIT 12", (guid,))
+        day = "\n".join(f"{r['ts'].strftime('%H:%M')} {r['kind']}: {_strip(r['text'], 200)}" for r in reversed(rows))
+        prompt = (f"You are {name}, {persona.get('personality', '')} Your goal: {agent.get('goal') or ''}. "
+                  f"Dream: {persona.get('dream', '')}. You are level {state.get('level')} and about to log off "
+                  f"for the night. Your day:\n{day or 'a quiet day'}\nSome of your thoughts today: "
+                  + " | ".join(_strip(t['text'], 120) for t in thoughts) +
+                  "\n\nReflect on your day. JSON with keys: journal (first-person diary entry, 4-7 sentences, honest, "
+                  "specific about people and events, in your own voice), mood (a word and a short reason), "
+                  "goal (your goal for tomorrow, or empty), growth (one sentence on how today changed you, or empty), "
+                  "opinions (object: name -> one sentence on how you feel about each person you dealt with today), "
+                  "memories (list of {text, importance 1-10, about}), "
+                  f"goodnight (a short goodnight line to whoever is around, typed in your chat style: "
+                  f"{persona.get('chat_style', 'casual')}).")
+        r = self.llm([{"role": "user", "content": prompt}], 900)
+        if r.get("journal"):
+            self.event(guid, "journal", r["journal"], state)
+        if r.get("mood"):
+            persona["mood"] = _strip(r["mood"], 120)
+        if r.get("growth"):
+            persona["growth"] = (persona.get("growth") or [])[-5:] + [_strip(r["growth"], 200)]
+        self.execute("UPDATE acore_characters.dash_agents SET persona = %s WHERE guid = %s", (json.dumps(persona), guid))
+        if r.get("goal"):
+            self.execute("UPDATE acore_characters.dash_agents SET goal = %s WHERE guid = %s", (_strip(r["goal"], 300), guid))
+            self.event(guid, "goal", f"Tomorrow: {_strip(r['goal'], 300)}", state)
+        for who, opinion in (r.get("opinions") or {}).items():
+            if isinstance(opinion, str) and opinion.strip():
+                self.remember(guid, f"How I feel about {who}: {opinion}", 7, _strip(who, 12))
+        for m in (r.get("memories") or [])[:5]:
+            if isinstance(m, dict) and m.get("text"):
+                self.remember(guid, m["text"], m.get("importance", 5), _strip(m.get("about"), 12) or None)
+        self.sync_chat_persona(agent, persona)
+        return r.get("goodnight")
+
+    def converse(self, a, b, state_a, state_b):
+        """A real back-and-forth between two agents who meet, then each remembers it."""
+        names = (a["name"], b["name"])
+        personas = {a["name"]: json.loads(a["persona"] or "{}"), b["name"]: json.loads(b["persona"] or "{}")}
+        states = {a["name"]: state_a, b["name"]: state_b}
+        agents_by = {a["name"]: a, b["name"]: b}
+        transcript = []
+        try:
+            for turn in range(6):
+                me, other = names[turn % 2], names[(turn + 1) % 2]
+                p = personas[me]
+                known = self.query("SELECT text FROM acore_characters.dash_agent_memories WHERE guid = %s AND about = %s "
+                                   "ORDER BY importance DESC LIMIT 4", (agents_by[me]["guid"], other))
+                prompt = (f"You are {me}: {p.get('personality', '')} Mood: {p.get('mood', 'fine')}. "
+                          f"You type like: {p.get('chat_style', 'casual')}. You are level {states[me].get('level')} in "
+                          f"{states[me].get('zone_name')}. You ran into {other} (level {states[other].get('level')} "
+                          f"{states[other].get('race')} {states[other].get('class')}, {states[other].get('faction')}). "
+                          f"What you remember about them: {' | '.join(k['text'] for k in known) or 'nothing, you have not met'}. "
+                          f"Conversation so far: {' / '.join(transcript) or '(you speak first)'}\n"
+                          "Say your next line in WoW chat (under 20 words, in your style). JSON: "
+                          "{\"line\": \"...\", \"end\": true if the conversation is naturally over}")
+                r = self.llm([{"role": "user", "content": prompt}], 200)
+                line = _strip(r.get("line"), 180)
+                if not line:
+                    break
+                self.say(agents_by[me], states[me], line)
+                transcript.append(f"{me}: {line}")
+                if r.get("end") and turn >= 1:
+                    break
+                time.sleep(random.uniform(5, 10))
+            if len(transcript) >= 2:
+                text = " / ".join(transcript)
+                for me, other in (names, names[::-1]):
+                    self.event(agents_by[me]["guid"], "convo", f"Talked with {other}: {text}", states[me])
+                summary = self.llm([{"role": "user", "content":
+                                     f"Conversation: {text}\nJSON: {{\"{names[0]}\": \"what {names[0]} will remember "
+                                     f"about {names[1]} from this, one sentence\", \"{names[1]}\": \"what {names[1]} "
+                                     f"will remember about {names[0]}, one sentence\"}}"}], 200)
+                for me, other in (names, names[::-1]):
+                    if summary.get(me):
+                        self.remember(agents_by[me]["guid"], summary[me], 6, other)
+        except Exception as e:
+            self.app.logger.warning("conversation %s/%s: %s", *names, e)
+        finally:
+            self.talking.discard(names[0])
+            self.talking.discard(names[1])
+
+    def maybe_converse(self, agent, state):
+        """Start a conversation with an agent standing nearby, now and then."""
+        if agent["name"] in self.talking or not state.get("alive") or state.get("combat"):
+            return
+        others = {o["name"]: o for o in self.query(
+            "SELECT * FROM acore_characters.dash_agents WHERE active = 1 AND sleeping = 0 AND guid <> %s", (agent["guid"],))}
+        for n in state["nearby"]:
+            o = others.get(n["name"])
+            if not o or n["kind"] != "agent" or n["dist"] > 30 or o["name"] in self.talking or not o["persona"]:
+                continue
+            pair = "|".join(sorted((agent["name"], o["name"])))
+            if not self.cooldown_ok(0, "convo", pair, CONVO_PAIR_COOLDOWN):
+                continue
+            ostate = self.states.get(o["guid"]) or {}
+            if not ostate.get("online") or ostate.get("combat"):
+                continue
+            self.talking.update((agent["name"], o["name"]))
+            threading.Thread(target=self.converse, args=(agent, o, state, ostate), daemon=True).start()
+            return
+
+    def landmarks_for(self, level, faction):
+        fac = "A" if faction == "Alliance" else "H"
+        return [{"id": i, "name": label} for i, (label, lo, f, _) in enumerate(LANDMARKS)
+                if i in self.landmark_ids and f in (fac, "B") and level >= lo]
+
+    def known_people(self, guid):
+        rows = self.query(
+            "SELECT DISTINCT c.name FROM acore_characters.mod_ollama_chat_history h "
+            "JOIN acore_characters.characters c ON c.guid = h.player_guid WHERE h.bot_guid = %s", (guid,))
+        names = {r["name"].lower() for r in rows}
+        for r in self.query("SELECT DISTINCT about FROM acore_characters.dash_agent_memories WHERE guid = %s "
+                            "AND about IS NOT NULL", (guid,)):
+            names.add(r["about"].lower())
+        return names
+
     def context(self, agent, state, persona, players):
         guid = agent["guid"]
         mems = self.query(
@@ -271,13 +526,41 @@ class AgentRunner:
         others = self.query("SELECT name, goal FROM acore_characters.dash_agents WHERE active = 1 AND guid <> %s",
                             (guid,))
         real = [p for p in players]
+        woke = self.query("SELECT MAX(ts) AS t FROM acore_characters.dash_agent_events WHERE guid = %s AND kind = 'wake'",
+                          (guid,))[0]["t"]
+        last_break = self.query("SELECT MAX(ts) AS t FROM acore_characters.dash_agent_events WHERE guid = %s "
+                                "AND kind = 'break'", (guid,))[0]["t"]
+        journal = self.query("SELECT text FROM acore_characters.dash_agent_events WHERE guid = %s AND kind = 'journal' "
+                             "ORDER BY id DESC LIMIT 1", (guid,))
+        mins = lambda t: int((time.time() - t.timestamp()) / 60) if t else None
+        awake_m, break_m = mins(woke), mins(last_break)
+        sched = persona.get("schedule") or {}
+        riding_note = ""
+        if state.get("riding", 0) == 0:
+            riding_note = (f"You cannot ride yet; riding + a mount at level 20 costs 5 gold (you have {state['gold']})."
+                           if state["level"] >= 15 else "")
+        elif state.get("riding") == 1 and state["level"] >= 35:
+            riding_note = f"Epic riding at level 40 costs 60 gold (you have {state['gold']})."
         lines = [
             f"YOU ARE {agent['name']}, level {state['level']} {state['race']} {state['class']} ({state['faction']}).",
             f"Personality: {persona.get('personality', '')}",
             f"Background: {persona.get('background', '')}",
-            f"Ambition: {persona.get('ambition', '')}  Quirk: {persona.get('quirks', '')}",
+            f"Ambition: {persona.get('ambition', '')}  Dream: {persona.get('dream', '')}  Quirk: {persona.get('quirks', '')}",
+            f"Hobbies: {', '.join(persona.get('hobbies', [])) or 'none in particular'}",
+            f"You type in chat like this (use it for everything you say or write): {persona.get('chat_style', 'casual')}",
+            f"Mood: {persona.get('mood', 'fine')}" + (f"  How you've grown: {' '.join(persona.get('growth', [])[-2:])}"
+                                                     if persona.get('growth') else ""),
             f"Current goal: {agent['goal'] or persona.get('first_goal', '')}",
+            f"Local time {time.strftime('%H:%M')}; you usually play {sched.get('wake', 8):02d}:00-{sched.get('sleep', 23):02d}:00. "
+            + (f"Online for {awake_m // 60} h {awake_m % 60} min today. " if awake_m is not None else "")
+            + (f"Last break {break_m} min ago." if break_m is not None else "No break yet today."),
         ]
+        if riding_note:
+            lines.append(riding_note)
+        if guid in self.just_woke:
+            lines.append("You just logged in for the day: maybe say hi to people around, check what you wanted to do.")
+        if journal:
+            lines.append(f"Your last journal entry: {_strip(journal[0]['text'], 500)}")
         if agent.get("nudge"):
             lines.append(f"A voice in your head (the server admin) suggests: {agent['nudge']}")
         lines += [
@@ -301,6 +584,8 @@ class AgentRunner:
                                                   f"'{_strip(c['bot_reply'], 80)}'" for c in chats) or "none"),
             "",
             "LOCATIONS you could travel to: " + json.dumps(self.locations_for(state["level"], state["faction"])),
+            "LANDMARKS for sightseeing: " + json.dumps(self.landmarks_for(state["level"], state["faction"])),
+            "PEOPLE YOU KNOW (could write to): " + (", ".join(sorted(self.known_people(guid))) or "nobody yet"),
         ]
         return "\n".join(lines)
 
@@ -312,7 +597,9 @@ class AgentRunner:
             "friendships and rivalries, chase your ambition, and be very social with the real people: greet them, "
             "befriend them, offer to adventure together, remember them. Never be creepy or pushy: if someone "
             "declines or is busy, give them space. Stay in character; talk like a real WoW player of your race, "
-            "class and personality. Be concise.\n\n" + ACTIONS_DOC +
+            "class and personality, typing in your own chat style. Live like a person: you get tired, take "
+            "breaks, have hobbies, save up for things, write to friends, and have moods. Most of the time you just "
+            "keep playing ('continue'); do something else only when it makes sense. Be concise.\n\n" + ACTIONS_DOC +
             "\n\nAnswer with JSON only: {\"thought\": \"your private reasoning, 1-2 sentences\", "
             "\"action\": {...}, \"say\": \"optional short line you say out loud to people nearby, or empty\", "
             "\"diary\": \"optional one-sentence diary entry if something meaningful happened, or empty\", "
@@ -368,11 +655,61 @@ class AgentRunner:
             ok, result = run(f"dash agent groupwith {name} {target}")
         elif kind == "leave_group":
             ok, result = run(f"dash agent leave {name}")
+        elif kind == "seek_agent" and target:
+            if self.cooldown_ok(guid, "seek", target, GOTO_COOLDOWN):
+                ok, result = run(f"dash agent goto {name} {target}")
+            else:
+                result = f"decided to catch up with {target} later"
+        elif kind == "take_break":
+            try:
+                minutes = max(5, min(30, int(action.get("minutes", 10))))
+            except (TypeError, ValueError):
+                minutes = 10
+            if not state["combat"]:
+                ok, result = run(f"dash agent rest {name} on")
+                self.execute("UPDATE acore_characters.dash_agents SET break_until = NOW() + INTERVAL %s MINUTE "
+                             "WHERE guid = %s", (minutes, guid))
+                self.event(guid, "break", f"Takes a {minutes} minute break.", state)
+        elif kind == "send_letter" and target and action.get("text"):
+            known = self.known_people(guid)
+            exists = self.query("SELECT name FROM acore_characters.characters WHERE name = %s", (target,))
+            if exists and target.lower() in known and self.cooldown_ok(guid, "letter", target, LETTER_TARGET_COOLDOWN) \
+                    and self.cooldown_ok(guid, "letter-any", "", LETTER_AGENT_COOLDOWN):
+                try:
+                    gold = max(0, min(5, int(action.get("gold", 0)), state["gold"] // 4))
+                except (TypeError, ValueError):
+                    gold = 0
+                subject = _strip(action.get("subject"), 50).replace("|", "-") or "A letter"
+                text = _strip(action.get("text"), 450).replace("|", "-")
+                ok, result = run(f"dash agent mail {name} {exists[0]['name']} {gold * 10000} {subject}|{text}")
+                if ok:
+                    self.event(guid, "letter", f"To {exists[0]['name']}: \"{subject}\" {text}"
+                                               + (f" (+{gold} gold)" if gold else ""), state)
+            else:
+                result = f"thought about writing to {target}, maybe another time"
+        elif kind == "sightsee":
+            try:
+                idx = int(action.get("place"))
+            except (TypeError, ValueError):
+                idx = -1
+            allowed = {l["id"] for l in self.landmarks_for(state["level"], state["faction"])}
+            if idx in allowed and self.cooldown_ok(guid, "sightsee", "", SIGHTSEE_COOLDOWN):
+                ok, result = run(f"dash agent travel {name} {self.landmark_ids[idx]}")
+                if ok:
+                    self.event(guid, "hobby", f"Goes sightseeing: {LANDMARKS[idx][0]}.", state)
+            else:
+                result = "decided to sightsee another day"
+        elif kind == "go_fishing":
+            if self.cooldown_ok(guid, "fish", "", FISH_COOLDOWN):
+                ok, result = run(f"dash agent do {name} go fishing")
+                self.event(guid, "hobby", "Goes fishing." if ok else "Wanted to fish, but there was no spot nearby.", state)
+        elif kind == "buy_mount":
+            ok, result = run(f"dash agent buymount {name}")
+            if ok:
+                self.event(guid, "mount", result, state)
+                self.remember(guid, f"I bought my mount at level {state['level']}!", 8)
 
-        say = _strip(decision.get("say"), 200)
-        if say and state["alive"]:
-            self.soap(f"dash agent say {name} {say}")
-            self.event(guid, "say", say, state)
+        self.say(agent, state, decision.get("say"))
         return f"{kind}{(' ' + target) if target else ''}: {result}"
 
     @staticmethod
@@ -410,7 +747,8 @@ class AgentRunner:
         while True:
             try:
                 if self.enabled() and self.world_awake:
-                    for a in self.query("SELECT guid, name FROM acore_characters.dash_agents WHERE active = 1"):
+                    for a in self.query("SELECT guid, name FROM acore_characters.dash_agents WHERE active = 1 "
+                                        "AND sleeping = 0"):
                         self.observe(a["guid"], a["name"])
             except Exception as e:
                 self.app.logger.warning("agent tracker: %s", e)
@@ -435,6 +773,8 @@ class AgentRunner:
         state = self.life_time(agent, state)
         self.states[guid] = state
         persona = self.ensure_persona(agent, state)
+        persona = self.upgrade_persona(agent, state, persona)
+        self.maybe_converse(agent, state)
 
         players = self.real_players()
         for p in players:
@@ -449,6 +789,7 @@ class AgentRunner:
         mem = decision.get("memory") or {}
         if isinstance(mem, dict) and mem.get("text"):
             self.remember(guid, mem["text"], mem.get("importance", 5), _strip(mem.get("about"), 12) or None)
+        self.just_woke.discard(guid)
         new_goal = _strip(decision.get("goal"), 300)
         self.execute("UPDATE acore_characters.dash_agents SET last_thought = %s, last_action = %s, last_think = NOW(), "
                      "nudge = NULL" + (", goal = %s" if new_goal else "") + " WHERE guid = %s",
@@ -493,11 +834,37 @@ class AgentRunner:
                         self.event(a["guid"], "status", f"{a['name']} wakes up: the world is running." if running
                                    else f"{a['name']} rests: the world server is stopped.")
                 if self.enabled() and running:
-                    agents = self.query("SELECT * FROM acore_characters.dash_agents WHERE active = 1 ORDER BY guid")
+                    if self.reload_chat_due and time.monotonic() - self.last_chat_reload > 300:
+                        self.soap("ollama reload")
+                        self.reload_chat_due, self.last_chat_reload = False, time.monotonic()
+                    agents = self.query("SELECT *, break_until < NOW() AS break_over FROM acore_characters.dash_agents "
+                                        "WHERE active = 1 ORDER BY guid")
                     now = time.monotonic()
                     for i, agent in enumerate(agents):
                         guid = agent["guid"]
                         forced = guid in self.think_now
+                        persona = json.loads(agent["persona"]) if agent["persona"] else {}
+                        # Daily rhythm: log off at bedtime (after reflecting on the day), back on in the morning.
+                        if persona and agent["born_at"] and not agent["paused"]:
+                            awake = self.should_be_awake(guid, persona)
+                            if agent["sleeping"] and awake:
+                                self.wake_up(agent, persona)
+                                continue
+                            if not agent["sleeping"] and not awake and agent["name"] not in self.talking:
+                                st = self.states.get(guid) or {}
+                                if st.get("online") and not st.get("combat"):
+                                    self.go_to_sleep(agent, st, persona)
+                                continue
+                        if agent["sleeping"]:
+                            continue
+                        if agent["break_until"]:
+                            if agent["break_over"]:
+                                self.soap(f"dash agent rest {agent['name']} off")
+                                self.execute("UPDATE acore_characters.dash_agents SET break_until = NULL WHERE guid = %s",
+                                             (guid,))
+                                self.event(guid, "break", f"{agent['name']} is back from the break.")
+                                self.next_think[guid] = now + 20
+                            continue
                         if agent["paused"] and not forced:
                             continue
                         # Stagger first thoughts: agent i wakes i*25 s after the loop first sees it.
@@ -522,10 +889,14 @@ class AgentRunner:
         except OSError:
             return
         sql = "\n".join(line for line in sql.splitlines() if not line.strip().startswith("--"))
-        has = self.query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = 'acore_characters' "
-                         "AND table_name = 'dash_agents' AND column_name = 'born_played'")
-        if has and not has[0]["n"] and self.query("SHOW TABLES FROM acore_characters LIKE 'dash_agents'"):
-            self.execute("ALTER TABLE acore_characters.dash_agents ADD COLUMN born_played INT UNSIGNED NULL AFTER born_at")
+        if self.query("SHOW TABLES FROM acore_characters LIKE 'dash_agents'"):
+            for col, ddl in (("born_played", "INT UNSIGNED NULL AFTER born_at"),
+                             ("sleeping", "TINYINT NOT NULL DEFAULT 0 AFTER paused"),
+                             ("break_until", "DATETIME NULL AFTER sleeping")):
+                has = self.query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = "
+                                 "'acore_characters' AND table_name = 'dash_agents' AND column_name = %s", (col,))
+                if not has[0]["n"]:
+                    self.execute(f"ALTER TABLE acore_characters.dash_agents ADD COLUMN {col} {ddl}")
         for stmt in [x.strip() for x in sql.split(";") if x.strip()]:
             self.execute(stmt.replace("CREATE TABLE IF NOT EXISTS `", "CREATE TABLE IF NOT EXISTS acore_characters.`")
                          .replace("INSERT IGNORE INTO `", "INSERT IGNORE INTO acore_characters.`"))
