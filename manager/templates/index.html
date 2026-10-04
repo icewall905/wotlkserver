@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AzerothCore Manager</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --text: #1f1e1c; --muted: #6b6862; --border: #e3e0da;
+  --accent: #2f5fd0; --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --code: #f0eee9;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #151514; --panel: #1f1f1d; --text: #ecebe8; --muted: #9d9a93; --border: #33322f;
+          --accent: #7a9cf0; --ok: #4cc27f; --warn: #e0a84a; --bad: #e66b5c; --code: #262624; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+       font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 16px; padding: 14px 20px;
+         border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap; }
+header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; }
+nav button { background: none; border: 0; padding: 6px 12px; border-radius: 6px; color: var(--muted); cursor: pointer; font: inherit; }
+nav button.active { background: var(--code); color: var(--text); }
+main { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
+section { display: none; } section.active { display: block; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.card h3 { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
+.big { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+.muted { color: var(--muted); }
+button.btn { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+             background: var(--panel); color: var(--text); cursor: pointer; }
+button.btn:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--bad); }
+button:disabled { opacity: .5; cursor: default; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+input, select { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+                background: var(--bg); color: var(--text); min-width: 0; }
+input.grow { flex: 1; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+.tablewrap { overflow-x: auto; }
+pre { background: var(--code); padding: 12px; border-radius: 8px; overflow: auto; max-height: 60vh;
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; margin: 0; }
+.q0 { color: #9d9d9d; } .q1 { color: var(--text); } .q2 { color: #1eff00; } .q3 { color: #0070dd; }
+.q4 { color: #a335ee; } .q5 { color: #ff8000; } .q6, .q7 { color: #e6cc80; }
+@media (prefers-color-scheme: light) { .q2 { color: #1a9c00; } .q6, .q7 { color: #a8862b; } }
+.bar { height: 10px; background: var(--accent); border-radius: 3px; min-width: 2px; }
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+.telelist { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-top: 8px; }
+button.tele { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: none; border: 0;
+              border-bottom: 1px solid var(--border); padding: 6px 10px; color: var(--text); font: inherit; cursor: pointer; }
+button.tele:hover { background: var(--code); }
+.kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.kpis .big { font-size: 24px; }
+table.kv td { white-space: normal; padding: 5px 8px; }
+.meter { display: inline-block; width: 60px; height: 8px; background: var(--code); border-radius: 4px; vertical-align: middle; overflow: hidden; }
+.meter div { height: 100%; background: var(--accent); }
+.agentgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.agent { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer; }
+.agent.sel { border-color: var(--accent); }
+.agent .nm { font-weight: 600; font-size: 15px; }
+.agent .lv { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.xpbar { height: 5px; background: var(--code); border-radius: 3px; overflow: hidden; margin: 4px 0 8px; }
+.xpbar div { height: 100%; background: var(--accent); }
+.agent .thought { font-style: italic; color: var(--muted); font-size: 12px; margin-top: 6px; max-height: 4.5em; overflow: hidden; }
+.timeline { max-height: 420px; overflow-y: auto; font-size: 13px; }
+.ev { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.ev .k { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--code); color: var(--muted); margin-right: 6px; }
+.ev .k.levelup { color: var(--ok); } .ev .k.death { color: var(--bad); } .ev .k.say { color: var(--accent); }
+.ev .k.diary, .ev .k.born, .ev .k.goal { color: var(--warn); }
+.ev .k.chat { color: var(--accent); } .ev .k.quest { color: var(--ok); }
+.ev .t { color: var(--muted); font-size: 11px; }
+.persona p { margin: 4px 0; }
+.help { white-space: pre-wrap; color: var(--muted); font-size: 12px; }
+td.wrap { white-space: normal; }
+a { color: var(--accent); }
+.tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--code); color: var(--muted); }
+#toast { position: fixed; bottom: 16px; right: 16px; left: 16px; max-width: 480px; margin-left: auto; background: var(--panel);
+         border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; display: none; white-space: pre-wrap; }
+#toast.bad { border-color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>AzerothCore Manager</h1>
+  <nav>
+    <button data-tab="overview" class="active">Overview</button>
+    <button data-tab="agents">Agents</button>
+    <button data-tab="activity">Activity</button>
+    <button data-tab="characters">Characters</button>
+    <button data-tab="items">Items</button>
+    <button data-tab="bots">Bots</button>
+    <button data-tab="players">Players</button>
+    <button data-tab="accounts">Accounts</button>
+    <button data-tab="console">Console</button>
+    <button data-tab="logs">Logs</button>
+    <button data-tab="backups">Backups</button>
+  </nav>
+</header>
+<main>
+  <section id="overview" class="active">
+    <div class="grid kpis">
+      <div class="card"><h3>World server</h3><div class="big" id="kServer">–</div><div class="muted" id="kServerSub"></div></div>
+      <div class="card"><h3>Players online</h3><div class="big" id="kPlayers">–</div><div class="muted" id="kPlayersSub"></div></div>
+      <div class="card"><h3>Bots online</h3><div class="big" id="kBots">–</div><div class="muted" id="kBotsSub"></div></div>
+      <div class="card"><h3>Server lag</h3><div class="big" id="kLag">–</div><div class="muted" id="kLagSub"></div></div>
+      <div class="card"><h3>LLM chat</h3><div class="big" id="kLlm">–</div><div class="muted" id="kLlmSub"></div></div>
+      <div class="card"><h3>New errors</h3><div class="big" id="kErr">–</div><div class="muted" id="kErrSub">since startup finished</div></div>
+    </div>
+    <div class="split">
+      <div class="card"><h3>Players online</h3><div class="tablewrap"><table id="ovPlayers"><thead>
+        <tr><th>Player</th><th>Level</th><th>Zone</th><th>Ping</th><th>Bots with them</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="card"><h3>Services</h3><div class="tablewrap"><table id="services"><thead>
+        <tr><th>Service</th><th>State</th><th>Up</th><th>CPU</th><th>Memory</th><th></th></tr></thead><tbody></tbody></table></div></div>
+    </div>
+    <div class="split">
+      <div class="card"><h3>Random bots</h3><div class="muted" id="ovBotSub" style="margin-bottom:6px"></div>
+        <table id="ovBotLevels"><tbody></tbody></table>
+        <h3 style="margin-top:12px">Busiest zones</h3><table id="ovBotZones"><tbody></tbody></table></div>
+      <div class="card"><h3>LLM chat</h3><table class="kv" id="ovLlm"><tbody></tbody></table>
+        <div class="row" style="margin-top:8px"><button class="btn" id="llmTest">Test reply</button></div></div>
+      <div class="card"><h3>World</h3><table class="kv" id="ovWorld"><tbody></tbody></table>
+        <h3 style="margin-top:12px">Database &amp; backups</h3><table class="kv" id="ovDb"><tbody></tbody></table></div>
+    </div>
+    <div class="card"><h3>Recent errors</h3><pre id="ovErrors" style="max-height:140px">–</pre></div>
+    <div class="card"><h3>Announce to server</h3>
+      <div class="row"><input class="grow" id="announceMsg" placeholder="Message shown to all players">
+      <button class="btn primary" id="announceBtn">Send</button></div></div>
+    <div class="muted" id="ovUpdated" style="text-align:right"></div>
+  </section>
+
+
+  <section id="agents">
+    <div class="card"><div class="row">
+      <button class="btn" id="agToggle">…</button>
+      <span class="muted" id="agInfo">Five characters living whole lives: an LLM makes their life decisions every few minutes, playerbots plays them.</span>
+    </div></div>
+    <div class="agentgrid" id="agCards"></div>
+    <div class="split">
+      <div class="card" id="agDetail" style="display:none">
+        <div class="row" style="justify-content:space-between"><h3 id="agdName" style="margin:0"></h3>
+          <div class="row"><button class="btn" id="agdThink">Think now</button><button class="btn" id="agdNudge">Nudge…</button>
+          <button class="btn" id="agdPause">Pause</button><button class="btn danger" id="agdNew">New life</button></div></div>
+        <div id="agdPersona" class="persona"></div>
+        <h3 style="margin-top:12px">Level over time</h3><div id="agdChart"></div>
+        <div class="row" style="margin:12px 0 6px"><h3 style="margin:0">Life story</h3>
+          <select id="agdKinds"><option value="">everything</option><option value="diary,levelup,zone,death,group,goal,born,say,chat,quest">highlights</option>
+          <option value="thought">thoughts</option><option value="say,chat">conversations</option><option value="diary">diary</option>
+          <option value="quest">quests</option><option value="levelup">level-ups</option><option value="zone">travels</option>
+          <option value="death">deaths</option><option value="group">parties</option><option value="gear,gold">gear &amp; gold</option></select></div>
+        <div id="agdTimeline" class="timeline"></div>
+        <h3 style="margin-top:12px">Memories</h3><div id="agdMemories" class="timeline" style="max-height:220px"></div>
+      </div>
+      <div class="card"><h3>Live feed</h3><div id="agFeed" class="timeline" style="max-height:900px"></div></div>
+    </div>
+  </section>
+
+  <section id="activity">
+    <div class="grid">
+      <div class="card"><h3>Accounts</h3><div class="big" id="actTotal">–</div></div>
+      <div class="card"><h3>Active 24 h</h3><div class="big" id="actDay">–</div></div>
+      <div class="card"><h3>Active 7 days</h3><div class="big" id="actWeek">–</div></div>
+      <div class="card"><h3>Active 30 days</h3><div class="big" id="actMonth">–</div></div>
+    </div>
+    <div class="card"><h3>Logged in now</h3><div id="actOnline"></div></div>
+    <div class="card"><h3>All accounts</h3><div class="tablewrap"><table id="actAccounts"><thead>
+      <tr><th>Account</th><th>Characters</th><th>Highest level</th><th>Played</th><th>Gold</th><th>Last login</th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="characters">
+    <div class="card"><div class="row">
+      <label>Character <select id="charSel"></select></label>
+      <button class="btn" onclick="loadCharacters()">Refresh</button>
+      <span class="muted" id="charInfo"></span></div></div>
+    <div class="split">
+      <div class="card"><h3>Alts as party bots</h3>
+        <p class="muted" style="margin-top:0">Logs an alt from the same account in as a bot that joins your party. The selected character must be online. <b>Ready up</b> levels the alt to you, learns its spells and gears it, without touching talents or action bars.
+          While an alt is in your party it follows you, so its saved location moves with you.</p>
+        <div class="row" style="margin-bottom:8px"><button class="btn" id="summonAll">Summon all my bots to me</button>
+          <button class="btn primary" id="fullMaint" title="Level to you, learn spells, maintenance (talents, glyphs, bags, consumables), autogear up to legendary">Full maintenance for all my bots</button></div>
+        <div class="tablewrap"><table id="altTable"><tbody></tbody></table></div></div>
+      <div class="card"><h3>Give gold</h3>
+        <div class="row"><input id="goldAmt" type="number" value="100" style="width:120px"> gold
+          <button class="btn primary" id="goldBtn">Give</button></div>
+        <p class="muted">Negative removes gold. Offline characters get it by mail.</p>
+        <h3 style="margin-top:16px">Spells &amp; skills</h3>
+        <div class="row"><button class="btn primary" id="learnBtn">Learn spells &amp; skills</button></div>
+        <p class="muted">Every class spell and rank a trainer would teach at the current level (free), plus weapon and defense skills maxed. Talents are untouched.</p>
+        <h3 style="margin-top:16px">Autogear</h3>
+        <div class="row"><select id="gearQ"><option value="green">green</option><option value="blue">blue</option><option value="epic">epic</option><option value="legendary" selected>legendary</option></select>
+          <button class="btn primary" id="gearBtn">Autogear</button></div>
+        <p class="muted">Upgrades gear for the character's level. Replaced items go to the bags (a slot is skipped if the bags are full).</p>
+        <h3 style="margin-top:16px">Set level</h3>
+        <div class="row"><input id="lvlVal" type="number" min="1" max="80" value="80" style="width:90px">
+          <button class="btn" id="lvlBtn">Set level</button></div>
+        <h3 style="margin-top:16px">Teleport</h3>
+        <div class="row"><input id="teleQ" class="grow" placeholder="search all locations, e.g. iron forge, deadmines, naxx" autocomplete="off">
+          <select id="teleMap"><option value="">everywhere</option></select></div>
+        <div class="muted" style="margin-top:6px">Click a location to teleport the selected character there.</div>
+        <div id="teleList" class="telelist"><div class="muted" style="padding:6px">Loading locations…</div></div>
+        <div class="row" style="margin-top:16px"><button class="btn" id="reviveBtn">Revive</button>
+          <button class="btn danger" id="kickBtn">Kick</button></div></div>
+    </div>
+  </section>
+
+  <section id="items">
+    <div class="card">
+      <div class="row"><input id="itemQ" class="grow" placeholder="item name or id (optional), e.g. felheart, 17802" autocomplete="off">
+        <button class="btn primary" id="itemSearch">Search</button></div>
+      <div class="row" style="margin-top:8px">
+        <select id="itemClass"><option value="">any class</option><option value="1">Warrior</option><option value="2">Paladin</option>
+          <option value="3">Hunter</option><option value="4">Rogue</option><option value="5">Priest</option><option value="6">Death Knight</option>
+          <option value="7">Shaman</option><option value="8">Mage</option><option value="9">Warlock</option><option value="11">Druid</option></select>
+        <select id="itemKind"><option value="gear">armor &amp; weapons</option><option value="armor">armor</option><option value="weapon">weapons</option>
+          <option value="">everything</option><option value="consumable">consumables</option><option value="gem">gems</option>
+          <option value="bag">bags</option><option value="recipe">recipes</option>
+          <option value="mount">mounts</option><option value="pet">companion pets</option></select>
+        <select id="itemSlot"><option value="">any slot</option>
+          <option value="1">Head</option><option value="2">Neck</option><option value="3">Shoulder</option><option value="16">Back</option>
+          <option value="5">Chest</option><option value="20">Robe</option><option value="9">Wrist</option><option value="10">Hands</option><option value="6">Waist</option>
+          <option value="7">Legs</option><option value="8">Feet</option><option value="11">Finger</option><option value="12">Trinket</option>
+          <option value="13">One-Hand</option><option value="17">Two-Hand</option><option value="21">Main Hand</option>
+          <option value="22">Off Hand</option><option value="14">Shield</option><option value="23">Held In Off-hand</option>
+          <option value="15">Ranged (bow)</option><option value="26">Ranged (gun/xbow/wand)</option><option value="25">Thrown</option>
+          <option value="28">Relic</option><option value="18">Bag</option></select>
+        <select id="itemArmor"><option value="">any armor type</option><option value="1">Cloth</option><option value="2">Leather</option>
+          <option value="3">Mail</option><option value="4">Plate</option></select>
+        <select id="itemQuality"><option value="">any quality</option>
+          <option value="1">Common</option><option value="2">Uncommon</option><option value="3">Rare</option><option value="4">Epic</option>
+          <option value="5">Legendary</option><option value="7">Heirloom</option><option value="0">Poor</option></select>
+        <select id="itemStat"><option value="">any stat</option><option value="4">Strength</option><option value="3">Agility</option>
+          <option value="7">Stamina</option><option value="5">Intellect</option><option value="6">Spirit</option><option value="45">Spell power</option>
+          <option value="38">Attack power</option><option value="31">Hit</option><option value="32">Crit</option><option value="36">Haste</option>
+          <option value="37">Expertise</option><option value="44">Armor pen</option><option value="12">Defense</option><option value="13">Dodge</option>
+          <option value="14">Parry</option><option value="43">Mana/5</option><option value="35">Resilience</option></select>
+      </div>
+      <div class="row" style="margin-top:8px">
+        Required level <input id="itemMin" type="number" placeholder="min" style="width:70px"> – <input id="itemMax" type="number" placeholder="max" style="width:70px">
+        Item level <input id="itemMinI" type="number" placeholder="min" style="width:70px"> – <input id="itemMaxI" type="number" placeholder="max" style="width:70px">
+        <select id="itemSort"><option value="ilvl">best item level first</option><option value="req">highest required level first</option>
+          <option value="quality">best quality first</option><option value="name">by name</option></select>
+        <label><input type="checkbox" id="itemJunk"> include test/deprecated</label>
+      </div>
+      <div class="row" style="margin-top:10px">Give to <select id="itemChar"></select>
+        <button class="btn" id="itemFit" title="Set class and max required level from this character">Fit to this character</button>
+        count <input id="itemCount" type="number" value="1" min="1" max="1000" style="width:70px">
+        <span class="muted">Online: straight into bags. Offline: by mail.</span></div>
+    </div>
+    <div class="card"><div class="muted" id="itemCountLbl" style="margin-bottom:6px"></div><div class="tablewrap"><table id="itemTable"><thead>
+      <tr><th>Item</th><th>Type</th><th>iLvl</th><th>Req</th><th>Stats</th><th></th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="bots">
+    <div class="card"><h3>Balance</h3>
+      <div class="row"><button class="btn primary" id="botReroll">Re-roll all bots</button>
+        <button class="btn" id="botTele">Teleport bots to their level zones</button>
+        <button class="btn" id="botRevive">Revive dead bots</button></div>
+      <p class="muted" id="botSettings"></p></div>
+    <div class="card"><h3>Around real players</h3><div class="tablewrap"><table id="botNear"><thead>
+      <tr><th>Player</th><th>Level</th><th>Zone</th><th>Bots in zone</th><th>Bots within ±5 levels</th></tr></thead><tbody></tbody></table></div></div>
+    <div class="split">
+      <div class="card"><h3>Bots by level</h3><table id="botLevels"><tbody></tbody></table></div>
+      <div class="card"><h3>Busiest zones</h3><table id="botMaps"><tbody></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="players">
+    <div class="card"><div class="row" style="margin-bottom:8px"><label><input type="checkbox" id="showBots"> include random bots</label>
+      <button class="btn" onclick="loadPlayers()">Refresh</button></div>
+      <div class="tablewrap"><table id="playerTable"><thead><tr><th>Name</th><th>Level</th><th>Race</th><th>Class</th><th>Zone</th><th>Account</th><th></th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="accounts">
+    <div class="card"><h3>Create account</h3>
+      <div class="row"><input id="newUser" placeholder="username" autocomplete="off"><input id="newPass" type="password" placeholder="password" autocomplete="new-password">
+      <button class="btn primary" id="createAcc">Create</button></div></div>
+    <div class="card"><div class="tablewrap"><table id="accTable"><thead><tr><th>Account</th><th>GM</th><th>Chars</th><th>Last login</th><th>Last IP</th><th></th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="console">
+    <div class="card"><h3>GM command</h3>
+      <div class="row"><input class="grow" id="cmd" placeholder="server info   ·   lookup item Thunderfury   ·   playerbots rndbot stats" autocomplete="off">
+      <button class="btn primary" id="cmdRun">Run</button></div>
+      <div class="row muted" style="margin:8px 0">Quick:
+        <button class="btn" data-cmd="server info">server info</button>
+        <button class="btn" data-cmd="saveall">saveall</button>
+        <button class="btn" data-cmd="reload config">reload config</button>
+        <button class="btn" data-cmd="ollama status">ollama status</button>
+      </div>
+      <pre id="cmdOut">Commands run from the server console. Commands that need a selected target only work in game.</pre></div>
+    <div class="card"><h3>Command reference</h3>
+      <div class="row" style="margin-bottom:8px"><input class="grow" id="cmdSearch" placeholder="search commands, e.g. item, tele, learn" autocomplete="off"></div>
+      <div class="tablewrap"><table id="cmdTable"><thead><tr><th>Command</th><th>GM</th><th>Help</th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="logs">
+    <div class="card"><div class="row" style="margin-bottom:8px">
+      <select id="logSvc"><option>ac-worldserver</option><option>ac-authserver</option><option>ac-database</option></select>
+      <select id="logLines"><option>200</option><option>500</option><option>2000</option></select>
+      <input class="grow" id="logFilter" placeholder="filter, e.g. error or Ollama">
+      <button class="btn" id="logLoad">Load</button></div>
+      <pre id="logOut"></pre></div>
+  </section>
+
+  <section id="backups">
+    <div class="card"><div class="row" style="margin-bottom:8px"><button class="btn primary" id="backupBtn">Back up databases now</button>
+      <span class="muted">Dumps auth, characters, playerbots and world. An automatic backup runs every day; the last 14 are kept.</span></div>
+      <div class="tablewrap"><table id="backupTable"><thead><tr><th>File</th><th>Size</th><th>Time</th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {headers: {'Content-Type': 'application/json'}, ...opts,
+                               body: opts.body ? JSON.stringify(opts.body) : undefined});
+  let data; try { data = await r.json(); } catch { data = {ok: false, output: `HTTP ${r.status}`}; }
+  return data;
+}
+function toast(msg, bad) {
+  const t = $('#toast'); t.textContent = msg; t.className = bad ? 'bad' : ''; t.style.display = 'block';
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 6000);
+}
+async function act(btn, fn) {
+  btn.disabled = true;
+  try { const d = await fn(); if (d && 'output' in d) toast(d.output || (d.ok ? 'Done' : 'Failed'), !d.ok); return d; }
+  finally { btn.disabled = false; }
+}
+function since(iso) {
+  if (!iso) return '–';
+  const s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 3600) return Math.floor(s / 60) + ' min';
+  if (s < 86400) return Math.floor(s / 3600) + ' h ' + Math.floor(s % 3600 / 60) + ' min';
+  return Math.floor(s / 86400) + ' d ' + Math.floor(s % 86400 / 3600) + ' h';
+}
+
+// tabs
+const loaders = {overview: loadStatus, agents: loadAgents, players: loadPlayers, accounts: loadAccounts, backups: loadBackups, logs: loadLogs,
+                 activity: loadActivity, characters: () => { loadCharacters(); loadTeles(); }, items: loadCharacters, bots: loadBots, console: loadCommands};
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button, section').forEach(e => e.classList.remove('active'));
+  b.classList.add('active'); $('#' + b.dataset.tab).classList.add('active');
+  try { localStorage.setItem('tab', b.dataset.tab); } catch {}
+  loaders[b.dataset.tab]?.();
+});
+
+// overview
+const kv = rows => rows.map(([k, v]) => `<tr><td class="muted">${esc(k)}</td><td>${v}</td></tr>`).join('');
+const barRows = (rows, key) => { const max = Math.max(1, ...rows.map(r => r.n));
+  return rows.map(r => `<tr><td style="width:40%">${esc(r[key])}</td><td style="width:50%"><div class="bar" style="width:${r.n / max * 100}%"></div></td><td>${r.n}</td></tr>`).join(''); };
+const meter = (v, max, unit) => v == null ? '–' : `<div class="meter"><div style="width:${Math.min(100, max ? v / max * 100 : 0)}%"></div></div> ${v}${unit}`;
+async function loadStatus() {
+  const d = await api('/api/overview');
+  if (!d || !d.services) return;
+  const s = d.server, bt = d.bot_totals || {}, llm = d.llm || {};
+  $('#kServer').innerHTML = d.world_up ? '<span class="dot ok"></span>Up' : '<span class="dot bad"></span>Down';
+  $('#kServerSub').textContent = d.world_up ? `${s.uptime || ''}` : 'stops after 60 min with no players; starts on login';
+  $('#kPlayers').textContent = d.players.length;
+  $('#kPlayersSub').textContent = `${d.db?.active_week ?? '–'} accounts active this week`;
+  $('#kBots').textContent = d.world_up ? (bt.random ?? 0) + (bt.alts ?? 0) : '–';
+  $('#kBotsSub').textContent = d.world_up ? `${bt.random ?? 0} random · ${bt.alts ?? 0} alts · ${bt.combat ?? 0} fighting · ${bt.dead ?? 0} dead` : '';
+  $('#kLag').textContent = s.mean != null ? `${s.mean} ms` : '–';
+  $('#kLagSub').textContent = s.p95 != null ? `median ${s.median} ms · 95% ${s.p95} ms · max ${s.max} ms` : '';
+  $('#kLlm').innerHTML = llm.reachable ? '<span class="dot ok"></span>OK' : '<span class="dot bad"></span>Down';
+  $('#kLlmSub').textContent = llm.reachable ? `${llm.latency_ms} ms · ${llm.delivered ?? 0} replies · ${llm.failed ?? 0} failed` : 'endpoint unreachable';
+  $('#kErr').textContent = d.errors?.count ?? '–';
+  $('#kErrSub').textContent = d.errors?.note || 'since startup finished';
+
+  $('#ovPlayers tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${esc(p.name)}</td><td>${p.level} ${esc(p.class)}</td>
+    <td>${esc(p.zone)}<div class="muted" style="font-size:12px">${esc(p.map)}</div></td><td>${p.latency} ms</td>
+    <td class="wrap">${p.bots.length ? p.bots.map(esc).join(', ') : '<span class="muted">none</span>'}</td></tr>`).join('')
+    : `<tr><td colspan="5" class="muted">${d.world_up ? 'Nobody online.' : 'World server is not running.'}</td></tr>`;
+
+  $('#services tbody').innerHTML = d.services.map(sv => {
+    const cls = sv.status === 'running' ? (sv.health && sv.health !== 'healthy' ? 'warn' : 'ok') : 'bad';
+    const ctl = !['ac-worldserver', 'ac-authserver'].includes(sv.name) ? '' : (sv.status === 'running'
+      ? `<button class="btn" onclick="svc('${sv.name}','restart',this)">Restart</button> <button class="btn danger" onclick="svc('${sv.name}','stop',this)">Stop</button>`
+      : `<button class="btn primary" onclick="svc('${sv.name}','start',this)">Start</button>`);
+    return `<tr><td>${esc(sv.name.replace('ac-', ''))}</td><td><span class="dot ${cls}"></span>${esc(sv.status)}</td><td>${since(sv.started)}</td>
+      <td>${meter(sv.cpu, 100, '%')}</td><td>${meter(sv.mem_mb, sv.mem_limit_mb, ' MB')}</td><td>${ctl}</td></tr>`;
+  }).join('');
+
+  const b = d.bots || {levels: [], zones: []};
+  $('#ovBotSub').textContent = `${b.alliance ?? 0} Alliance · ${b.horde ?? 0} Horde`;
+  $('#ovBotLevels tbody').innerHTML = barRows(b.levels, 'bracket');
+  $('#ovBotZones tbody').innerHTML = barRows(b.zones, 'zone');
+
+  $('#ovLlm tbody').innerHTML = kv([
+    ['Module', llm.enabled ? 'enabled' : '<span class="tag">disabled</span>'],
+    ['Model', esc(llm.model)], ['Endpoint', `<span style="font-size:12px">${esc(llm.url)}</span>`],
+    ['Reachable', llm.reachable ? `yes, ${llm.latency_ms} ms` : '<span style="color:var(--bad)">no</span>'],
+    ['Replies', `${llm.delivered ?? '–'} delivered of ${llm.submitted ?? '–'} · ${llm.failed ?? '–'} failed`],
+    ['Right now', `${llm.in_flight ?? 0} in flight · ${llm.queued ?? 0} queued · ${llm.sends_minute ?? 0} sent last minute`],
+    ['Last error', esc(llm.last_error || 'none')]]);
+  const w = d.world || {}, inst = d.instances || {};
+  $('#ovWorld tbody').innerHTML = kv([
+    ['Version', s.revision ? `${esc(s.revision)} <span class="muted">(${esc(s.rev_date)})</span>` : '–'],
+    ['Characters in world', s.in_world ?? '–'],
+    ['Active instances', d.world_up ? `${inst.dungeons ?? 0} dungeons · ${inst.battlegrounds ?? 0} BGs · ${inst.arenas ?? 0} arenas` : '–'],
+    ['NPC spawns', (w.creatures ?? 0).toLocaleString() + ` <span class="muted">(${(w.creature_types ?? 0).toLocaleString()} types)</span>`],
+    ['Object spawns', (w.gameobjects ?? 0).toLocaleString()],
+    ['Quests / items', `${(w.quests ?? 0).toLocaleString()} / ${(w.items ?? 0).toLocaleString()}`]]);
+  const db = d.db || {sizes: {}}, bk = d.backups || {};
+  $('#ovDb tbody').innerHTML = kv([
+    ['Accounts / characters', `${db.accounts ?? '–'} / ${db.characters ?? '–'}`],
+    ['Database size', Object.entries(db.sizes).map(([k, v]) => `${esc(k.replace('acore_', ''))} ${v} MB`).join(' · ')],
+    ['Latest backup', bk.latest ? `${esc(bk.latest_time)} <span class="muted">(${bk.latest_mb} MB)</span>` : 'none'],
+    ['Disk free', bk.disk_free_gb != null ? `${bk.disk_free_gb} of ${bk.disk_total_gb} GB` : '–']]);
+  $('#ovErrors').textContent = d.errors?.recent?.length ? d.errors.recent.join('\n') : (d.errors?.note || 'No new errors since startup.');
+  $('#ovUpdated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+async function svc(name, action, btn) {
+  if (action !== 'start' && !confirm(`${action} ${name}? Players are saved and disconnected; this can take a minute or two.`)) return;
+  await act(btn, () => api(`/api/service/${name}/${action}`, {method: 'POST'})); loadStatus();
+}
+$('#llmTest').onclick = e => act(e.target, () => api('/api/llm/test', {method: 'POST'}));
+$('#announceBtn').onclick = e => { const m = $('#announceMsg').value.trim(); if (m) act(e.target, () => api('/api/announce', {method: 'POST', body: {message: m}})).then(d => d.ok && ($('#announceMsg').value = '')); };
+
+// players
+async function loadPlayers() {
+  const rows = await api('/api/players' + ($('#showBots').checked ? '?bots=1' : ''));
+  $('#playerTable tbody').innerHTML = rows.length ? rows.map(p => `<tr><td>${esc(p.name)}</td><td>${p.level}</td><td>${esc(p.race)}</td>
+    <td>${esc(p.class)}</td><td>${esc(p.zone)}</td><td class="muted">${esc(p.username)}</td><td>${p.is_bot ? '<span class="tag">bot</span>' : ''}</td></tr>`).join('')
+    : '<tr><td colspan="7" class="muted">Nobody online.</td></tr>';
+}
+$('#showBots').onchange = loadPlayers;
+
+// accounts
+async function loadAccounts() {
+  const rows = await api('/api/accounts');
+  $('#accTable tbody').innerHTML = rows.map(a => `<tr><td>${esc(a.username)}${a.online ? ' <span class="dot ok"></span>' : ''}${a.banned ? ' <span class="tag">banned</span>' : ''}</td>
+    <td><select onchange="setGm('${esc(a.username)}', this)">${[0,1,2,3].map(l => `<option ${l == a.gmlevel ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+    <td>${a.characters}</td><td class="muted">${esc(a.last_login || 'never')}</td><td class="muted">${esc(a.last_ip)}</td>
+    <td><button class="btn" onclick="setPw('${esc(a.username)}', this)">Password</button>
+        <button class="btn danger" onclick="ban('${esc(a.username)}', ${a.banned}, this)">${a.banned ? 'Unban' : 'Ban'}</button></td></tr>`).join('');
+}
+async function setGm(user, sel) { await act(sel, () => api(`/api/accounts/${user}/gmlevel`, {method: 'POST', body: {level: +sel.value}})); }
+const PW_WORDS = ['tiger', 'dragon', 'gnome', 'troll', 'murloc', 'wolf', 'raptor', 'gryphon', 'panda', 'otter', 'falcon', 'kodo'];
+function easyPassword() {
+  const r = n => crypto.getRandomValues(new Uint32Array(1))[0] % n;
+  return PW_WORDS[r(PW_WORDS.length)] + (100 + r(900));
+}
+async function setPw(user, btn) {
+  const pw = prompt(`New password for ${user} (any password up to 16 characters, no spaces). Type your own or keep the suggestion:`, easyPassword());
+  if (!pw) return;
+  const d = await act(btn, () => api(`/api/accounts/${user}/password`, {method: 'POST', body: {password: pw}}));
+  if (d && d.ok) {
+    const t = $('#toast'); t.textContent = `Password for ${user} is now: ${pw}\n(Account names are not case sensitive; passwords are.)`;
+    t.className = ''; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 30000);
+  }
+}
+async function ban(user, banned, btn) {
+  if (banned) { await act(btn, () => api(`/api/accounts/${user}/unban`, {method: 'POST'})); return loadAccounts(); }
+  const reason = prompt(`Ban ${user}. Reason:`); if (reason === null) return;
+  const duration = prompt('Duration (e.g. 1d, 12h, -1 for permanent):', '-1'); if (duration === null) return;
+  await act(btn, () => api(`/api/accounts/${user}/ban`, {method: 'POST', body: {reason, duration}})); loadAccounts();
+}
+$('#createAcc').onclick = async e => {
+  const d = await act(e.target, () => api('/api/accounts', {method: 'POST', body: {username: $('#newUser').value.trim(), password: $('#newPass').value}}));
+  if (d.ok) { $('#newUser').value = $('#newPass').value = ''; loadAccounts(); }
+};
+
+// console
+async function runCmd(c) {
+  $('#cmdOut').textContent = '…';
+  const d = await api('/api/command', {method: 'POST', body: {command: c}});
+  $('#cmdOut').textContent = (d.ok ? '' : 'ERROR: ') + (d.output || '(no output)');
+}
+$('#cmdRun').onclick = () => { const c = $('#cmd').value.trim(); if (c) runCmd(c); };
+$('#cmd').onkeydown = e => { if (e.key === 'Enter') $('#cmdRun').click(); };
+document.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => { $('#cmd').value = b.dataset.cmd; runCmd(b.dataset.cmd); });
+
+
+
+// agents
+let agents = [], agSel = null, agTimer = null;
+const KIND_LABEL = {thought: 'thinks', say: 'says', diary: 'diary', levelup: 'level up', zone: 'travel', death: 'died',
+  group: 'party', goal: 'goal', born: 'born', status: 'status', nudge: 'nudge', error: 'error', chat: 'conversation',
+  quest: 'quest', gear: 'gear', gold: 'gold'};
+const evRow = (e, withName) => `<div class="ev"><span class="k ${esc(e.kind)}">${esc(KIND_LABEL[e.kind] || e.kind)}</span>`
+  + `${withName ? `<b>${esc(e.name)}</b> ` : ''}${esc(e.kind === 'say' ? '"' + e.text + '"' : e.text)}`
+  + `<div class="t">${esc(e.ts)}${e.level ? ` · level ${e.level}` : ''}${e.zone ? ` · ${esc(e.zone)}` : ''}</div></div>`;
+async function loadAgents() {
+  const d = await api('/api/agents');
+  if (!d.agents) return;
+  agents = d.agents;
+  $('#agToggle').textContent = d.enabled ? 'Pause all agents' : 'Let agents think';
+  $('#agToggle').dataset.on = d.enabled ? '1' : '0';
+  $('#agCards').innerHTML = agents.map(a => {
+    const st = a.state || {}, xp = st.xpnext ? Math.round(st.xp / st.xpnext * 100) : 0;
+    const status = !st.online ? '<span class="dot"></span>offline' : !st.alive ? '<span class="dot bad"></span>dead'
+      : st.combat ? '<span class="dot warn"></span>fighting' : '<span class="dot ok"></span>' + esc(st.area_name || st.zone_name || '');
+    return `<div class="agent ${agSel === a.guid ? 'sel' : ''}" onclick="selectAgent(${a.guid})">
+      <div class="row" style="justify-content:space-between"><span class="nm">${esc(a.name)}</span>
+        <span class="tag">${esc(st.faction || '')}</span></div>
+      <div class="muted">${esc(st.race || '')} ${esc(st.class || '')}${a.paused ? ' · <b>paused</b>' : ''}</div>
+      <div class="row" style="justify-content:space-between;align-items:flex-end"><span class="lv">${st.level || '–'}</span>
+        <span class="muted" style="font-size:12px">${status}</span></div>
+      <div class="xpbar"><div style="width:${xp}%"></div></div>
+      <div style="font-size:12px"><b>Goal:</b> ${esc(a.goal || '…')}</div>
+      <div class="thought">${esc(a.last_thought || 'Not awake yet.')}</div></div>`;
+  }).join('');
+  const feed = await api('/api/agents/feed?limit=60');
+  $('#agFeed').innerHTML = feed.map(e => evRow(e, true)).join('') || '<div class="muted">Nothing yet. Agents think every 2-3 minutes.</div>';
+  if (agSel) renderAgent();
+}
+async function selectAgent(guid) { agSel = guid; loadAgents(); }
+function levelChart(hist) {
+  if (hist.length < 2) return '<div class="muted">The chart appears after the first level-ups.</div>';
+  const t = hist.map(h => new Date(h.ts.replace(' ', 'T')).getTime()), t0 = t[0], t1 = Math.max(t[t.length - 1], t0 + 1);
+  const W = 600, H = 120, x = v => 30 + (v - t0) / (t1 - t0) * (W - 40), y = l => H - 15 - (l - 1) / 79 * (H - 25);
+  const pts = hist.map((h, i) => `${x(t[i]).toFixed(1)},${y(h.level).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
+    ${[1, 20, 40, 60, 80].map(l => `<line x1="30" x2="${W - 10}" y1="${y(l)}" y2="${y(l)}" stroke="var(--border)"/><text x="4" y="${y(l) + 4}" font-size="10" fill="var(--muted)">${l}</text>`).join('')}
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>`;
+}
+async function renderAgent() {
+  const a = agents.find(x => x.guid === agSel); if (!a) return;
+  $('#agDetail').style.display = 'block';
+  const p = a.persona || {}, st = a.state || {};
+  $('#agdName').textContent = `${a.name}, level ${st.level || '?'} ${st.race || ''} ${st.class || ''}`;
+  $('#agdPause').textContent = a.paused ? 'Resume' : 'Pause';
+  $('#agdPersona').innerHTML = p.personality ? `<p>${esc(p.personality)}</p><p class="muted">${esc(p.background || '')}</p>
+    <p><b>Ambition:</b> ${esc(p.ambition || '')}</p><p><b>Quirk:</b> ${esc(p.quirks || '')}</p>
+    <p class="muted">Gold ${st.gold ?? '–'} · item level ${st.ilvl ?? '–'} · played ${st.played_h ?? '–'} h · ${esc((st.group || []).length ? 'with ' + st.group.map(g => g.split(':')[0]).join(', ') : 'solo')}</p>
+    <p class="muted"><b>Last action:</b> ${esc(a.last_action || '')}</p>` : '<p class="muted">Not born yet: the first thought creates their persona.</p>';
+  $('#agdChart').innerHTML = levelChart(a.level_history);
+  const ev = await api(`/api/agents/feed?guid=${a.guid}&limit=150&kinds=${encodeURIComponent($('#agdKinds').value)}`);
+  $('#agdTimeline').innerHTML = ev.map(e => evRow(e, false)).join('') || '<div class="muted">No events yet.</div>';
+  const mem = await api(`/api/agents/${a.guid}/memories`);
+  $('#agdMemories').innerHTML = mem.map(m => `<div class="ev"><span class="k">${m.importance}/10</span>${esc(m.text)}${m.about ? ` <span class="muted">(${esc(m.about)})</span>` : ''}<div class="t">${esc(m.ts)}</div></div>`).join('') || '<div class="muted">No memories yet.</div>';
+}
+$('#agdKinds').onchange = renderAgent;
+const agAct = (action, body) => act(event.target, () => api(`/api/agents/${agSel}/${action}`, {method: 'POST', body})).then(loadAgents);
+$('#agdThink').onclick = () => agAct('think');
+$('#agdPause').onclick = () => agAct(agents.find(x => x.guid === agSel)?.paused ? 'resume' : 'pause');
+$('#agdNudge').onclick = () => { const t = prompt('Suggest something to this agent (they decide whether to follow it), e.g. "Go meet Thorn in Redridge":'); if (t) agAct('nudge', {text: t}); };
+$('#agdNew').onclick = () => confirm('End this life and start over at level 1 with a new persona and no memories?') && agAct('newlife');
+$('#agToggle').onclick = e => act(e.target, () => api('/api/agents/enabled', {method: 'POST', body: {on: e.target.dataset.on !== '1'}})).then(loadAgents);
+setInterval(() => { if ($('#agents').classList.contains('active')) loadAgents(); }, 10000);
+
+// activity
+async function loadActivity() {
+  const d = await api('/api/activity');
+  $('#actTotal').textContent = d.totals.accounts; $('#actDay').textContent = d.totals.day;
+  $('#actWeek').textContent = d.totals.week; $('#actMonth').textContent = d.totals.month;
+  $('#actOnline').innerHTML = d.online.length ? d.online.map(a => `<div style="margin-bottom:12px">
+    <strong>${esc(a.username)}</strong> <span class="muted">· ${a.session_min != null ? fmtMin(a.session_min) + ' since login' : ''} · ${esc(a.ip)}</span>
+    <div class="tablewrap"><table><thead><tr><th>Character</th><th>Level</th><th>Class</th><th>Zone</th><th>Played</th><th>Gold</th></tr></thead><tbody>
+    ${a.characters.map(c => `<tr><td>${esc(c.name)}</td><td>${c.level}</td><td>${esc(c.race)} ${esc(c.class)}</td><td>${esc(c.zone)}</td><td>${c.played_h} h</td><td>${c.gold}</td></tr>`).join('')}
+    </tbody></table></div></div>`).join('') : '<span class="muted">Nobody logged in.</span>';
+  $('#actAccounts tbody').innerHTML = d.accounts.map(a => `<tr><td>${esc(a.username)}</td><td>${a.chars}</td><td>${a.max_level}</td>
+    <td>${a.played_h} h</td><td>${a.gold}</td><td class="muted">${esc(a.last_login || 'never')}</td></tr>`).join('');
+}
+function fmtMin(m) { return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; }
+
+// characters
+let chars = [];
+async function loadCharacters() {
+  chars = await api('/api/characters');
+  const keep = $('#charSel').value || localGet('char');
+  const byAcc = {};
+  chars.forEach(c => (byAcc[c.username] ||= []).push(c));
+  const accs = Object.keys(byAcc).sort((a, b) => (byAcc[b].some(c => c.online) - byAcc[a].some(c => c.online)) || a.localeCompare(b));
+  const opts = accs.map(acc => `<optgroup label="${esc(acc)}">` + byAcc[acc].map(c =>
+    `<option value="${esc(c.name)}">${esc(c.name)} (${c.level} ${esc(c.class)})${c.online ? ' · online' : ''}</option>`).join('') + '</optgroup>').join('');
+  $('#charSel').innerHTML = opts; $('#itemChar').innerHTML = opts;
+  if (keep && chars.some(c => c.name === keep)) { $('#charSel').value = keep; $('#itemChar').value = keep; }
+  renderChar();
+}
+function localGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function localSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+function renderChar() {
+  const c = chars.find(x => x.name === $('#charSel').value); if (!c) return;
+  localSet('char', c.name);
+  $('#charInfo').textContent = `${c.race} ${c.class}, ${c.zone}, ${c.gold} gold, account ${c.username}`;
+  const alts = chars.filter(x => x.account === c.account && x.name !== c.name);
+  $('#altTable tbody').innerHTML = alts.length ? alts.map(a => `<tr><td>${esc(a.name)}</td><td>${a.level} ${esc(a.class)}</td>
+    <td>${a.online ? '<span class="dot ok"></span>online' : '<span class="muted">offline</span>'}</td>
+    <td class="wrap">${a.online
+      ? `<button class="btn primary" onclick="altReady('${esc(a.name)}',this)" title="Level to ${c.level}, learn spells and skills, autogear up to legendary (talents untouched)">Ready up</button>
+         <button class="btn" onclick="altbot('${esc(a.name)}','invite',this)" title="Put into your party / fix the party">Invite</button>
+         <button class="btn" onclick="summon('${esc(a.name)}',this)">Summon</button>
+         <button class="btn" onclick="altLevel('${esc(a.name)}',this)">Level to ${c.level}</button>
+         <button class="btn" onclick="altLearn('${esc(a.name)}',this)">Learn</button>
+         <button class="btn" onclick="altCmd('${esc(a.name)}','autogear',this)">Autogear</button>
+         <button class="btn danger" onclick="altMaintenance('${esc(a.name)}',this)" title="Bot setup: resets and re-picks talents, refills bags">Maintenance</button>
+         <button class="btn" onclick="altCmdPrompt('${esc(a.name)}',this)">Command…</button>
+         <button class="btn danger" onclick="altbot('${esc(a.name)}','remove',this)">Send home</button>`
+      : `<button class="btn primary" onclick="altbot('${esc(a.name)}','add',this)">Join my party</button>
+         <button class="btn" onclick="altLevel('${esc(a.name)}',this)">Level to ${c.level}</button>`}</td></tr>`).join('')
+    : '<tr><td class="muted">No other characters on this account.</td></tr>';
+}
+$('#charSel').onchange = () => { $('#itemChar').value = $('#charSel').value; renderChar(); };
+$('#itemChar').onchange = () => localSet('char', $('#itemChar').value);
+async function altbot(alt, action, btn) {
+  await act(btn, () => api('/api/altbot', {method: 'POST', body: {master: $('#charSel').value, alt, action}}));
+  loadCharacters();
+}
+async function altReady(bot, btn) {
+  await act(btn, () => api('/api/altbot/ready', {method: 'POST', body: {master: $('#charSel').value, bot}})); loadCharacters();
+}
+async function altLevel(bot, btn) {
+  const c = chars.find(x => x.name === $('#charSel').value);
+  await act(btn, () => api('/api/character/level', {method: 'POST', body: {character: bot, level: c.level}})); loadCharacters();
+}
+function altMaintenance(bot, btn) {
+  if (confirm(`Maintenance is the bot setup routine: it RESETS and re-picks ${bot}'s talents, changes glyphs and refills bags. `
+              + `Action-bar buttons for removed talents disappear. Only use it on characters nobody plays by hand. Continue?`))
+    altCmd(bot, 'maintenance', btn);
+}
+async function altCmd(bot, command, btn) {
+  await act(btn, () => api('/api/altbot/cmd', {method: 'POST', body: {master: $('#charSel').value, bot, command}}));
+}
+function altCmdPrompt(bot, btn) {
+  const command = prompt(`Command for ${bot} (as if you whispered it), e.g. "talents spec arms", "follow", "stay", "summon":`);
+  if (command) altCmd(bot, command, btn);
+}
+const ch = () => $('#charSel').value;
+$('#goldBtn').onclick = e => act(e.target, () => api('/api/gold', {method: 'POST', body: {character: ch(), gold: +$('#goldAmt').value}})).then(loadCharacters);
+$('#lvlBtn').onclick = e => act(e.target, () => api('/api/character/level', {method: 'POST', body: {character: ch(), level: +$('#lvlVal').value}})).then(loadCharacters);
+async function summon(target, btn) {
+  await act(btn, () => api('/api/summon', {method: 'POST', body: {master: ch(), target}}));
+}
+$('#summonAll').onclick = e => summon('all', e.target);
+$('#fullMaint').onclick = async e => {
+  if (!confirm(`Full maintenance for every bot with ${ch()}: level them to you, learn spells, maintenance and autogear.\n\n`
+               + `Maintenance RESETS and re-picks their talents. Only for bot companions nobody plays by hand. Continue?`)) return;
+  const btn = e.target, label = btn.textContent; btn.textContent = 'Working…';
+  const d = await act(btn, () => api('/api/altbot/fullmaint', {method: 'POST', body: {master: ch()}}));
+  btn.textContent = label;
+  if (d && d.ok) { const t = $('#toast'); t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 20000); }
+  loadCharacters();
+};
+let teles = null;
+const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+async function loadTeles() {
+  if (teles) return;
+  teles = await api('/api/teleports');
+  const maps = [...new Set(teles.map(t => t.map))].sort((a, b) => a.localeCompare(b));
+  const cont = ['Eastern Kingdoms', 'Kalimdor', 'Outland', 'Northrend'];
+  $('#teleMap').innerHTML = '<option value="">everywhere</option>'
+    + cont.filter(m => maps.includes(m)).map(m => `<option>${esc(m)}</option>`).join('')
+    + '<option disabled>── dungeons & raids ──</option>'
+    + maps.filter(m => !cont.includes(m)).map(m => `<option>${esc(m)}</option>`).join('');
+  renderTeles();
+}
+function renderTeles() {
+  if (!teles) return;
+  const q = norm($('#teleQ').value), m = $('#teleMap').value;
+  const hits = teles.filter(t => (!m || t.map === m) && (!q || norm(t.name).includes(q) || norm(t.map).includes(q)));
+  $('#teleList').innerHTML = hits.slice(0, 300).map(t => `<button class="tele" onclick="teleport(${t.id}, this)">
+      <span>${esc(t.label)}</span><span class="muted">${esc(t.map)}</span></button>`).join('')
+    + (hits.length > 300 ? `<div class="muted" style="padding:6px">${hits.length - 300} more, refine the search…</div>` : '')
+    + (hits.length ? '' : '<div class="muted" style="padding:6px">No locations match.</div>');
+}
+async function teleport(id, btn) {
+  await act(btn, () => api('/api/character/teleport', {method: 'POST', body: {character: ch(), location: id}}));
+}
+$('#teleMap').onchange = renderTeles;
+$('#learnBtn').onclick = e => act(e.target, () => api('/api/character/learn', {method: 'POST', body: {character: ch()}}));
+async function altLearn(bot, btn) { await act(btn, () => api('/api/character/learn', {method: 'POST', body: {character: bot}})); }
+$('#gearBtn').onclick = e => act(e.target, () => api('/api/character/autogear', {method: 'POST', body: {character: ch(), quality: $('#gearQ').value}}));
+$('#reviveBtn').onclick = e => act(e.target, () => api('/api/character/revive', {method: 'POST', body: {character: ch()}}));
+$('#kickBtn').onclick = e => confirm(`Kick ${ch()}?`) && act(e.target, () => api('/api/character/kick', {method: 'POST', body: {character: ch()}}));
+$('#teleQ').oninput = renderTeles;
+
+// items
+const CLASS_IDS = {Warrior: 1, Paladin: 2, Hunter: 3, Rogue: 4, Priest: 5, 'Death Knight': 6, Shaman: 7, Mage: 8, Warlock: 9, Druid: 11};
+async function searchItems() {
+  const v = id => $(id).value;
+  const q = new URLSearchParams({q: v('#itemQ').trim(), cls: v('#itemClass'), kind: v('#itemKind'), slot: v('#itemSlot'),
+    armortype: v('#itemArmor'), quality: v('#itemQuality'), stat: v('#itemStat'), minlvl: v('#itemMin'), maxlvl: v('#itemMax'),
+    minilvl: v('#itemMinI'), maxilvl: v('#itemMaxI'), sort: v('#itemSort'), junk: $('#itemJunk').checked ? '1' : ''});
+  $('#itemCountLbl').textContent = 'Searching…';
+  const rows = await api('/api/items?' + q);
+  $('#itemCountLbl').textContent = rows.length >= 200 ? 'Showing the first 200 matches; narrow the filters for more.' : `${rows.length} items`;
+  $('#itemTable tbody').innerHTML = rows.length ? rows.map(i => `<tr>
+    <td><a class="q${i.Quality}" href="https://www.wowhead.com/wotlk/item=${i.entry}" target="_blank" rel="noopener">${esc(i.name)}</a>
+        <span class="muted">#${i.entry}</span></td>
+    <td class="muted">${esc([i.type, i.slot].filter(Boolean).join(' · '))}</td><td>${i.ItemLevel}</td><td>${i.RequiredLevel || ''}</td>
+    <td class="wrap muted" style="font-size:12px">${esc(i.stats)}</td>
+    <td><button class="btn" onclick="giveItem(${i.entry}, this)">Give</button></td></tr>`).join('')
+    : '<tr><td colspan="6" class="muted">No items found.</td></tr>';
+}
+$('#itemFit').onclick = () => {
+  const c = chars.find(x => x.name === $('#itemChar').value); if (!c) return;
+  $('#itemClass').value = CLASS_IDS[c.class] || ''; $('#itemMax').value = c.level; searchItems();
+};
+async function giveItem(id, btn) {
+  const character = $('#itemChar').value; if (!character) return toast('Pick a character first', true);
+  await act(btn, () => api('/api/give', {method: 'POST', body: {character, item: id, count: +$('#itemCount').value || 1}}));
+}
+$('#itemSearch').onclick = searchItems;
+$('#itemQ').onkeydown = e => { if (e.key === 'Enter') searchItems(); };
+['#itemClass', '#itemKind', '#itemSlot', '#itemArmor', '#itemQuality', '#itemStat', '#itemSort', '#itemJunk']
+  .forEach(id => $(id).onchange = searchItems);
+['#itemMin', '#itemMax', '#itemMinI', '#itemMaxI'].forEach(id => $(id).onkeydown = e => { if (e.key === 'Enter') searchItems(); });
+
+// bots
+async function loadBots() {
+  const d = await api('/api/bots');
+  const s = d.settings;
+  $('#botSettings').textContent = `${s.MaxRandomBots} random bots online at a time · levels: ${s.SyncLevelWithPlayers === '1' ? 'synced to highest player' : 'level-bracket module (weighted to real players)'}`
+    + ` · concentrate in player zones: ${s.RandomBotConcentrateInPlayerZone === '1' ? 'on' : 'off'} · alt auto-login: ${s.BotAutologin === '1' ? 'on' : 'off'}`
+    + (d.live ? ' · live figures' : ' · from last save (world server down)');
+  $('#botNear tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${esc(p.name)}</td><td>${p.level}</td><td>${esc(p.zone)}</td>
+    <td>${p.bots_in_zone}</td><td>${p.bots_near_level}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">No real players online.</td></tr>';
+  const bars = (rows, key) => { const max = Math.max(1, ...rows.map(r => r.n));
+    return rows.map(r => `<tr><td style="width:40%">${esc(r[key])}</td><td style="width:50%"><div class="bar" style="width:${r.n / max * 100}%"></div></td><td>${r.n}</td></tr>`).join(''); };
+  $('#botLevels tbody').innerHTML = bars(d.levels, 'bracket');
+  $('#botMaps tbody').innerHTML = bars(d.zones, 'zone');
+}
+$('#botReroll').onclick = e => confirm('Re-roll every random bot? Levels, gear and positions are regenerated; the level-bracket module then keeps the spread, weighted towards real players. Takes up to a minute.')
+  && act(e.target, () => api('/api/bots/reroll', {method: 'POST'})).then(() => { loadBots(); setTimeout(loadBots, 5000); });
+$('#botTele').onclick = e => act(e.target, () => api('/api/bots/teleport', {method: 'POST'})).then(loadBots);
+$('#botRevive').onclick = e => act(e.target, () => api('/api/bots/revive', {method: 'POST'})).then(loadBots);
+
+// command reference
+let cmdTimer;
+async function loadCommands() {
+  const rows = await api('/api/commands?q=' + encodeURIComponent($('#cmdSearch').value.trim()));
+  $('#cmdTable tbody').innerHTML = rows.map(c => `<tr><td><a href="#" onclick="$('#cmd').value='${esc(c.name)} ';$('#cmd').focus();scrollTo(0,0);return false">${esc(c.name)}</a></td>
+    <td>${c.security}</td><td class="wrap help">${esc(c.help)}</td></tr>`).join('');
+}
+$('#cmdSearch').oninput = () => { clearTimeout(cmdTimer); cmdTimer = setTimeout(loadCommands, 250); };
+
+// logs
+async function loadLogs() {
+  const q = new URLSearchParams({lines: $('#logLines').value, filter: $('#logFilter').value});
+  const d = await api(`/api/logs/${$('#logSvc').value}?${q}`);
+  const out = $('#logOut'); out.textContent = d.output || '(empty)'; out.scrollTop = out.scrollHeight;
+}
+$('#logLoad').onclick = loadLogs;
+$('#logFilter').onkeydown = e => { if (e.key === 'Enter') loadLogs(); };
+
+// backups
+async function loadBackups() {
+  const rows = await api('/api/backups');
+  $('#backupTable tbody').innerHTML = rows.map(b => `<tr><td>${esc(b.name)}</td><td>${b.size_mb} MB</td><td class="muted">${esc(b.time)}</td></tr>`).join('')
+    || '<tr><td colspan="3" class="muted">No backups yet.</td></tr>';
+}
+$('#backupBtn').onclick = async e => { e.target.textContent = 'Backing up…'; await act(e.target, () => api('/api/backup', {method: 'POST'})); e.target.textContent = 'Back up databases now'; loadBackups(); };
+
+// Restore the last tab only now that every loader and its state is defined.
+let restored = false;
+try { const t = localStorage.getItem('tab'); const b = t && document.querySelector(`nav button[data-tab="${t}"]`); if (b) { b.click(); restored = true; } } catch {}
+if (!restored) loadStatus();
+setInterval(() => { if ($('#overview').classList.contains('active')) loadStatus(); }, 15000);
+</script>
+</body>
+</html>

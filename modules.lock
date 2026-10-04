@@ -1,0 +1,22 @@
+# Module checkouts used by this server: <directory> <git url> <commit>
+# Restore with scripts/setup-modules.sh (also applies patches/<module>.patch).
+mod-1v1-arena https://github.com/azerothcore/mod-1v1-arena 5ef5708d031f3b02283e6e599aa655bd320d904e
+mod-account-mounts https://github.com/azerothcore/mod-account-mounts 0a3b4c4cc084ebbbb7e7e07f88222a08a70b0dde
+mod-ah-bot https://github.com/azerothcore/mod-ah-bot.git c11d8318cbd8714a9980f9464f78e07d3d48a70a
+mod-anticheat https://github.com/azerothcore/mod-anticheat 41e983a4ae559c03512b1d65dbd814635cdc2d30
+mod-autobalance https://github.com/azerothcore/mod-autobalance.git 73d4ad3c379fbfc35c63b5b9b44fba1f7d9e213d
+mod-boss-announcer https://github.com/azerothcore/mod-boss-announcer 3af6e83e976a9a143ded51f4e8afeb69863fb5ec
+mod-character-tools https://github.com/azerothcore/mod-character-tools 78ac7805d2786f9bc1dabf095073185b07b0163c
+mod-congrats-on-level https://github.com/azerothcore/mod-congrats-on-level fed4752e0cd71db7faa4d6f9f4650f5377d2f31c
+mod-fireworks-on-level https://github.com/azerothcore/mod-fireworks-on-level e5c58542996e0f1ad3410ebdb7cff9ed9d52e3d6
+mod-global-chat https://github.com/azerothcore/mod-global-chat c6809a7faf631fff6b07d2af8d60b96e2ddc6467
+mod-multi-client-check https://github.com/azerothcore/mod-multi-client-check 281924ad3fd0bec61d78ff110c03061e2db2d884
+mod-npc-buffer https://github.com/azerothcore/mod-npc-buffer 532a6ba80c31b673338fcdb747cb2226bec4887e
+mod-npc-enchanter https://github.com/azerothcore/mod-npc-enchanter af32add66eafc0e0eb8775999e76ceed75f18b74
+mod-npc-services https://github.com/azerothcore/mod-npc-services aa44c28acb21fdc1d45084788214f2eee2d5f87c
+mod-ollama-chat https://github.com/DustinHendrickson/mod-ollama-chat.git a9966f3e6b20efb98aab8b56ff9d997d8e1bcc06
+mod-player-bot-level-brackets https://github.com/DustinHendrickson/mod-player-bot-level-brackets.git a94f9c6458bf6264164436a53ddd4e5c3ed44fdb
+mod-playerbots https://github.com/liyunfan1223/mod-playerbots.git 037c01418b5d01506917a3db9b44fd56ac5f965c
+mod-quick-teleport https://github.com/azerothcore/mod-quick-teleport 3a88ac0f294f7ce21441fb3cb3de13f87c9683eb
+mod-solocraft https://github.com/azerothcore/mod-solocraft 59588838988d1b74111d26670d99d0e649014b93
+mod-transmog https://github.com/azerothcore/mod-transmog 0d85cbc53d63ce2df8527169ce6ae47f5f6f6ba8

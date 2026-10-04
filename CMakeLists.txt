@@ -25,7 +25,9 @@ endif()
 # Set projectname (must be done AFTER setting configurationtypes)
 project(AzerothCore VERSION 3.0.0 LANGUAGES CXX C)
 
-# add this options before PROJECT keyword
+list(APPEND CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES /usr/include/x86_64-linux-gnu)
+set(CURL_INCLUDE_DIRS "/usr/include/x86_64-linux-gnu")
+set(CURL_LIBRARIES "/usr/lib/x86_64-linux-gnu/libcurl.so")
 set(CMAKE_DISABLE_SOURCE_CHANGES ON)
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 

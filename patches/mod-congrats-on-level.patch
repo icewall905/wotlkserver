@@ -1,0 +1,16 @@
+diff --git a/src/mod_congratsonlevel.cpp b/src/mod_congratsonlevel.cpp
+index 265914e..032cf11 100644
+--- a/src/mod_congratsonlevel.cpp
++++ b/src/mod_congratsonlevel.cpp
+@@ -140,6 +140,11 @@ public:
+     // Level Up Rewards
+     void OnPlayerLevelChanged(Player* player, uint8 oldLevel) override
+     {
++        // Playerbots run on "headless" sessions with no client. Skip them: with hundreds of
++        // bots levelling, the server-wide announcements (and gold rewards) never stop.
++        if (player->GetSession()->GetRemoteAddress() == "headless")
++            return;
++
+         // If enabled...
+         if (col.congratsEnable)
+         {

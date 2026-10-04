@@ -1125,6 +1125,8 @@ void WorldSession::HandlePlayerLoginFromDB(LoginQueryHolder const& holder)
 
     sScriptMgr->OnPlayerLogin(pCurrChar);
 
+    // Spawn all other characters on this account as NPC allies in the party
+
     if (pCurrChar->HasAtLoginFlag(AT_LOGIN_FIRST))
     {
         pCurrChar->RemoveAtLoginFlag(AT_LOGIN_FIRST);

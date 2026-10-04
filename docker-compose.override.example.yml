@@ -1,0 +1,88 @@
+# Copy to docker-compose.override.yml and adjust. Secrets go in .env (see .env.example).
+# Override configuration for AzerothCore
+# Configure worldserver settings and fix ac-db-import
+
+services:
+  ac-worldserver:
+    mem_limit: 8g
+    # On stop the server logs everyone out (1000 bots included) and saves them; give it time
+    # instead of Docker's 10 s default, after which it is killed and unsaved progress is lost.
+    stop_grace_period: 5m
+    networks:
+      - azerothcore-wotlk_ac-network
+    environment:
+      AC_NETWORK_USE_SOCKET_ACTIVATION: "0"
+      AC_RATE_XP_KILL: "5"
+      AC_AI_PLAYERBOT_RANDOM_BOT_AUTOLOGIN: "1"
+      AC_UPDATES_ENABLE_DATABASES: "1"
+      # SOAP is used by ac-manager over the internal network only
+      AC_SOAP_ENABLED: "1"
+      AC_SOAP_IP: "0.0.0.0"
+    ports: !override
+      - ${DOCKER_WORLD_EXTERNAL_PORT:-8085}:8085
+    volumes:
+      - ./modules:/azerothcore/modules:ro
+      # Note: DOCKER_VOL_DATA in .env overrides the volume to use bind mount
+
+  ac-db-import:
+    environment:
+      AC_UPDATES_EXCEPTION_SHUTDOWN_DELAY: "10000"
+    restart: "no"
+    volumes:
+      - ./data:/azerothcore/data
+      - ./modules:/azerothcore/modules:ro
+
+  # Volume overrides - migrated to bind mounts
+  ac-database:
+    container_name: ac-database
+    image: mysql:8.4
+    command: --mysql-native-password=ON
+    networks:
+      - azerothcore-wotlk_ac-network
+    volumes:
+      # Override: Use bind mount instead of volume for database
+      - ./docker-data/database:/var/lib/mysql
+
+  ac-authserver:
+    networks:
+      - azerothcore-wotlk_ac-network
+    environment:
+      AC_NETWORK_USE_SOCKET_ACTIVATION: "0"
+  
+  ac-client-data-init:
+    volumes:
+      # Override: Use bind mount instead of volume for client data
+      - ./docker-data/client-data:/azerothcore/env/dist/data
+      - ./apps/installer/includes/functions.sh:/azerothcore/apps/installer/includes/functions.sh
+  # Web management dashboard. Bind it to a private/VPN address (MANAGER_BIND), never a public one:
+  # it can control containers through the Docker socket.
+  ac-manager:
+    container_name: ac-manager
+    build: ./manager
+    image: local/ac-manager:latest
+    restart: unless-stopped
+    networks:
+      - azerothcore-wotlk_ac-network
+    ports:
+      - ${MANAGER_BIND:-127.0.0.1}:${MANAGER_PORT:-28090}:8080
+    environment:
+      DB_HOST: ac-database
+      DB_USER: root
+      DB_PASS: ${DOCKER_DB_ROOT_PASSWORD:-password}
+      SOAP_URL: http://ac-worldserver:7878/
+      SOAP_USER: ${SOAP_USER:-}
+      SOAP_PASS: ${SOAP_PASS:-}
+      MANAGER_USER: ${MANAGER_USER:-admin}
+      MANAGER_PASSWORD: ${MANAGER_PASSWORD:?set MANAGER_PASSWORD in .env}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./backups:/backups
+      - ./env/dist/etc:/etc-ac:ro
+      - ./docker-data/client-data/dbc:/dbc:ro
+    depends_on:
+      ac-database:
+        condition: service_healthy
+
+networks:
+  azerothcore-wotlk_ac-network:
+    external: true

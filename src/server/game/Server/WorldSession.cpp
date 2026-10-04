@@ -765,6 +765,8 @@ void WorldSession::LogoutPlayer(bool save, bool redirecting)
         ///- Remove pet
         _player->RemovePet(nullptr, PET_SAVE_AS_CURRENT);
 
+        ///- Remove allied characters (NPCs representing other account characters)
+
         // pussywizard: on logout remove auras that are removed at map change (before saving to db)
         // there are some positive auras from boss encounters that can be kept by logging out and logging in after boss is dead, and may be used on next bosses
         _player->RemoveAurasWithInterruptFlags(AURA_INTERRUPT_FLAG_CHANGE_MAP);

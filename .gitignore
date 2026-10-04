@@ -137,3 +137,36 @@ e2e/go.work.sum
 
 .cache
 compile_commands.json
+
+# --- this server's local/private files ---
+/backups/
+/docker-data/
+/patches/*.orig
+/*.log
+/build_log.txt
+/notes/
+/debug_scripts/
+/macros/
+/docker-compose.override.yml.backup.*
+/ACCOUNT_SETUP_GUIDE.md
+/QUICK_ACCOUNT_SETUP.md
+/VOLUME-MIGRATION-README.md
+/account_setup.sh
+/auto_setup_ice_characters.sh
+/create_accounts_interactive.sh
+/create_characters.sh
+/db_backup.sh
+/fix-azerothcore.sh
+/ice_characters_commands.txt
+/level_rudelbur.sh
+/manage_accounts.sh
+/migrate-volumes.sh
+/rudelbur_setup_commands.txt
+/setup_ice_characters.sh
+/scripts/health_check.sh
+/scripts/allow_mounts_level_1.sql
+__pycache__/
+# our own module lives in this repo; the other modules are pinned in modules.lock
+!/modules/mod-dashboard-tools/
+!/.env.example
+!/patches/*.patch

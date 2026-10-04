@@ -124,7 +124,8 @@ foreach(TOOL_NAME ${TOOLS_BUILD_LIST})
       PRIVATE
         modules
         scripts
-        acore-core-interface)
+        acore-core-interface
+        curl)
 
     # Install config
     CopyToolConfig(${TOOL_PROJECT_NAME} ${TOOL_NAME})

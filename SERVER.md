@@ -1,0 +1,82 @@
+# Family WotLK server: playerbots, AI chat, LLM agents and a web dashboard
+
+This repository is an [AzerothCore](https://www.azerothcore.org) (Playerbot branch fork) setup for a small
+private server: about 1000 playerbots, AI chat through an OpenAI-compatible LLM endpoint, five
+**LLM agents** that live whole lives in the game, and a web dashboard to run all of it.
+
+## What is here
+
+| Path | What |
+|---|---|
+| `manager/` | **ac-manager**, the web dashboard (Flask): overview, agents, characters, items, bots, accounts, GM console, logs, backups |
+| `manager/agents.py` | The minds of the LLM agents |
+| `modules/mod-dashboard-tools/` | Server module with the `.dash` console commands the dashboard and agents use |
+| `modules.lock`, `patches/` | Every other module, pinned to the commit used here, plus small local patches |
+| `scripts/setup-modules.sh` | Clones the modules from `modules.lock` and applies `patches/` |
+| `scripts/safe-restart.sh` | Restart without losing progress (warn, save, graceful stop) |
+| `scripts/merge-conf.py` | Merge a newer `.conf.dist` into a live config, keeping your values |
+| `server_manager.sh`, `ac-manager.service` | Idle manager: stops the world server when nobody plays, starts it on login |
+| `acmd.sh` | Send a console command and print the reply (`./acmd.sh "server info"`) |
+| `docker-compose.override.example.yml`, `.env.example` | Deployment templates |
+
+## Setup
+
+```bash
+git clone git@github.com:icewall905/wotlkserver.git && cd wotlkserver
+scripts/setup-modules.sh                      # fetch modules at the pinned commits + patches
+cp .env.example .env                          # set passwords, ports, MANAGER_BIND
+cp docker-compose.override.example.yml docker-compose.override.yml
+docker compose build && docker compose up -d
+```
+
+Then create the dashboard's SOAP account (GM level 3) with the names from `.env`:
+
+```
+./acmd.sh "account create ACMANAGER <SOAP_PASS>"
+./acmd.sh "account set gmlevel ACMANAGER 3 -1"
+```
+
+Module configs live in `env/dist/etc/modules/` (not committed). Notable settings used here:
+`OllamaChat.Url` points at an OpenAI-compatible `/v1/chat/completions` endpoint (vLLM), and
+`OllamaChat.RAGDataPath` must be absolute (`/azerothcore/modules/mod-ollama-chat/data/rag/`).
+
+## The dashboard
+
+Served on `MANAGER_BIND:MANAGER_PORT` with HTTP basic auth. It mounts the Docker socket, so
+bind it to a private or VPN address only. Tabs:
+
+- **Overview:** players with their bots, services with CPU and memory, lag, bot spread, LLM health, world and database figures, new errors
+- **Agents:** the LLM agents (see below)
+- **Characters:** alts as party bots (join, ready up, full maintenance, summon), gold, level, teleport, learn spells, autogear
+- **Items:** search by class, slot, quality, stat and level, then give to a character (into bags if online, otherwise by mail)
+- **Bots, Players, Accounts, Console, Logs, Backups:** management pages; daily automatic backups are kept for 14 days
+
+## LLM agents
+
+Five characters live a whole life from level 1 to 80. Playerbots plays them (combat, quests,
+movement). Every two or three minutes each agent's mind, an LLM call, reads its situation,
+memories, recent events and conversations, and picks a high-level action: keep questing,
+grind, travel to a zone for its level, train, gear up, meet or invite a real player, whisper,
+team up with another agent, or leave a group. It may also say something, write a diary
+line, update its long-term goal or store a memory.
+
+Everything is recorded in `dash_agent_events` and `dash_agent_memories` and shown in the
+Agents tab: persona, level chart, life story (thoughts, conversations, quests, level-ups,
+travel, deaths, parties, gear, gold) and memories. From there you can pause an agent, make it
+think now, nudge it with a suggestion, or start a new life.
+
+Agents are listed in `characters.dash_agents`. The module stops the random bot manager from
+re-rolling, logging out or teleporting them, and `.dash reroll` re-rolls every bot except agents.
+
+## Local patches
+
+- `mod-ollama-chat`: OpenAI-compatible endpoints (chosen when the URL contains `/chat/completions`)
+- `mod-playerbots`: public wrappers for random bot event timers (used to protect agents)
+- `mod-congrats-on-level`: skip bots, so the level-up announcements are for real players only
+
+## Operations
+
+- Always restart with `scripts/safe-restart.sh [warning-seconds]`. With 1000 bots, a shutdown
+  takes 30-60 s to save everyone, and the compose file allows 5 minutes for it.
+- After adding a module, check its SQL created its tables: modules that keep SQL in
+  `data/sql/<db>/base` are not picked up by db-import.

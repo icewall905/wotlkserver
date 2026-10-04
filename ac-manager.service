@@ -1,0 +1,16 @@
+[Unit]
+Description=AzerothCore Idle Manager
+After=docker.service
+Requires=docker.service
+RequiresMountsFor=/mnt/nvmestorage
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/nvmestorage/compose/azerothcore-wotlk
+ExecStart=/mnt/nvmestorage/compose/azerothcore-wotlk/server_manager.sh
+Restart=always
+RestartSec=10
+User=root
+
+[Install]
+WantedBy=multi-user.target

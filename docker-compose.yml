@@ -8,21 +8,22 @@
 services:
   ac-database:
     container_name: ac-database
-    image: mysql:8.4
-    networks:
-      - ac-network
+    image: mysql:8.0
     ports:
       - ${DOCKER_DB_EXTERNAL_PORT:-3306}:3306
     environment:
       - MYSQL_ROOT_PASSWORD=${DOCKER_DB_ROOT_PASSWORD:-password}
+      - MYSQL_ROOT_AUTHENTICATION_PLUGIN=mysql_native_password
     volumes:
       - ${DOCKER_VOL_DB:-ac-database}:/var/lib/mysql
     restart: unless-stopped
     healthcheck:
-      test: "/usr/bin/mysql --user=root --password=$$MYSQL_ROOT_PASSWORD --execute \"SHOW DATABASES;\""
+      test: "mysqladmin ping -u root -p\"$$MYSQL_ROOT_PASSWORD\""
       interval: 5s
       timeout: 10s
       retries: 40
+    networks:
+      - ac-network
 
   ac-db-import:
     container_name: ac-db-import
@@ -89,7 +90,7 @@ services:
       ac-database:
         condition: service_healthy
       ac-db-import:
-        condition: service_completed_successfully
+        condition: service_started
       ac-client-data-init:
         condition: service_completed_successfully
 
@@ -124,7 +125,7 @@ services:
       ac-database:
         condition: service_healthy
       ac-db-import:
-        condition: service_completed_successfully
+        condition: service_started
 
   ac-client-data-init:
     container_name: ac-client-data-init

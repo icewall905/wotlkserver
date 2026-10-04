@@ -1,0 +1,256 @@
+diff --git a/data/sql/characters/base/2025_11_01_personality_manual_only.sql b/data/sql/characters/base/2025_11_01_personality_manual_only.sql
+index 0e939ab..053e440 100644
+--- a/data/sql/characters/base/2025_11_01_personality_manual_only.sql
++++ b/data/sql/characters/base/2025_11_01_personality_manual_only.sql
+@@ -1,3 +1,15 @@
+--- Add manual_only column to personality templates table
+-ALTER TABLE `mod_ollama_chat_personality_templates`
+-ADD COLUMN `manual_only` TINYINT(1) NOT NULL DEFAULT 0 AFTER `prompt`;
++-- Add manual_only column to personality templates table (idempotent)
++SET @dbname = DATABASE();
++SET @tablename = 'mod_ollama_chat_personality_templates';
++SET @columnname = 'manual_only';
++SET @preparedStatement = (SELECT IF(
++  (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
++   WHERE TABLE_SCHEMA = @dbname
++   AND TABLE_NAME = @tablename
++   AND COLUMN_NAME = @columnname) > 0,
++  'SELECT 1',
++  'ALTER TABLE `mod_ollama_chat_personality_templates` ADD COLUMN `manual_only` TINYINT(1) NOT NULL DEFAULT 0 AFTER `prompt`'
++));
++PREPARE alterIfNotExists FROM @preparedStatement;
++EXECUTE alterIfNotExists;
++DEALLOCATE PREPARE alterIfNotExists;
+\ No newline at end of file
+diff --git a/src/mod-ollama-chat_api.cpp b/src/mod-ollama-chat_api.cpp
+index 0f8840e..8faaa36 100644
+--- a/src/mod-ollama-chat_api.cpp
++++ b/src/mod-ollama-chat_api.cpp
+@@ -11,6 +11,7 @@
+ #include <nlohmann/json.hpp>
+ #include <mutex>
+ #include <sstream>
++#include <vector>
+ 
+ namespace
+ {
+@@ -20,6 +21,129 @@ namespace
+     std::mutex             g_settingsMutex;
+     OllamaEndpointSettings g_settings;
+ 
++    // OpenAI-compatible servers (vLLM, llama.cpp server, LM Studio, ...) are
++    // selected by pointing OllamaChat.Url at a /chat/completions endpoint.
++    bool IsOpenAIEndpoint(const std::string& url)
++    {
++        return url.find("/chat/completions") != std::string::npos;
++    }
++
++    std::vector<std::string> SplitStopSequences(const std::string& stop)
++    {
++        std::vector<std::string> stopSeqs;
++        std::stringstream ss(stop);
++        std::string item;
++        while (std::getline(ss, item, ','))
++        {
++            const size_t start = item.find_first_not_of(" \t");
++            const size_t end   = item.find_last_not_of(" \t");
++            if (start != std::string::npos && end != std::string::npos)
++                stopSeqs.push_back(item.substr(start, end - start + 1));
++        }
++        return stopSeqs;
++    }
++
++    nlohmann::json BuildOpenAIRequest(const OllamaEndpointSettings& cfg,
++                                      const std::string& prompt,
++                                      const OllamaThinkRequest& think,
++                                      uint32_t reasoningReserve)
++    {
++        nlohmann::json messages = nlohmann::json::array();
++        if (!cfg.systemPrompt.empty())
++            messages.push_back({ { "role", "system" }, { "content", SanitizeUTF8(cfg.systemPrompt) } });
++        messages.push_back({ { "role", "user" }, { "content", SanitizeUTF8(prompt) } });
++
++        nlohmann::json request = {
++            { "model",    cfg.model },
++            { "messages", messages },
++            { "stream",   false },
++        };
++
++        // OpenAI servers do not share Ollama's sampling defaults (vLLM uses
++        // temperature 1.0 / top_p 1.0), so always send the configured values.
++        if (cfg.numPredict > 0)               request["max_tokens"] = cfg.numPredict + reasoningReserve;
++        request["temperature"] = cfg.temperature;
++        request["top_p"]       = cfg.topP;
++        if (cfg.repeatPenalty != 1.1f)        request["repetition_penalty"] = cfg.repeatPenalty;
++        if (cfg.topK >= 0)                    request["top_k"] = cfg.topK;
++        if (cfg.minP >= 0.0f)                 request["min_p"] = cfg.minP;
++        if (cfg.presencePenalty > -999.0f)    request["presence_penalty"] = cfg.presencePenalty;
++        if (cfg.frequencyPenalty > -999.0f)   request["frequency_penalty"] = cfg.frequencyPenalty;
++
++        if (!cfg.seed.empty())
++        {
++            try
++            {
++                request["seed"] = std::stoi(cfg.seed);
++            }
++            catch (const std::exception&)
++            {
++                if (g_DebugEnabled)
++                    LOG_INFO("module.ollamachat", "[Ollama Chat] Invalid seed value: {}", cfg.seed);
++            }
++        }
++
++        std::vector<std::string> stopSeqs = SplitStopSequences(cfg.stop);
++        if (!stopSeqs.empty())
++            request["stop"] = stopSeqs;
++
++        // Qwen3-style chat templates read this; servers that do not know it ignore it.
++        request["chat_template_kwargs"] = { { "enable_thinking", think.wanted } };
++        if (!think.level.empty())
++            request["reasoning_effort"] = think.level;
++
++        return request;
++    }
++
++    void ParseChatCompletionBody(const std::string& body, std::string& outText,
++                                 std::string& outThinking, std::string& outError)
++    {
++        try
++        {
++            nlohmann::json parsed = nlohmann::json::parse(body);
++
++            if (parsed.contains("error"))
++            {
++                const auto& err = parsed["error"];
++                outError = err.is_object() && err.contains("message") && err["message"].is_string()
++                         ? err["message"].get<std::string>()
++                         : err.dump();
++                return;
++            }
++
++            if (!parsed.contains("choices") || !parsed["choices"].is_array() || parsed["choices"].empty())
++            {
++                outError = "no choices in chat completion response";
++                return;
++            }
++
++            const auto& message = parsed["choices"][0]["message"];
++            if (message.contains("content") && message["content"].is_string())
++                outText = message["content"].get<std::string>();
++
++            // vLLM reports separated reasoning as "reasoning" or "reasoning_content".
++            for (const char* key : { "reasoning_content", "reasoning" })
++                if (message.contains(key) && message[key].is_string() && outThinking.empty())
++                    outThinking = message[key].get<std::string>();
++
++            // Reasoning leaked into the answer when the server has no reasoning parser.
++            const size_t thinkEnd = outText.find("</think>");
++            if (thinkEnd != std::string::npos)
++            {
++                if (outThinking.empty())
++                    outThinking = outText.substr(0, thinkEnd);
++                outText = outText.substr(thinkEnd + 8);
++            }
++
++            const size_t first = outText.find_first_not_of(" \t\r\n");
++            outText = first == std::string::npos ? std::string() : outText.substr(first);
++        }
++        catch (const std::exception& e)
++        {
++            outError = std::string("JSON parse failure: ") + e.what();
++        }
++    }
++
+     nlohmann::json BuildRequest(const OllamaEndpointSettings& cfg,
+                                 const std::string& prompt,
+                                 const OllamaThinkRequest& think,
+@@ -74,21 +198,9 @@ namespace
+         if (hasOptions)
+             request["options"] = options;
+ 
+-        if (!cfg.stop.empty())
+-        {
+-            std::vector<std::string> stopSeqs;
+-            std::stringstream ss(cfg.stop);
+-            std::string item;
+-            while (std::getline(ss, item, ','))
+-            {
+-                const size_t start = item.find_first_not_of(" \t");
+-                const size_t end   = item.find_last_not_of(" \t");
+-                if (start != std::string::npos && end != std::string::npos)
+-                    stopSeqs.push_back(item.substr(start, end - start + 1));
+-            }
+-            if (!stopSeqs.empty())
+-                request["stop"] = stopSeqs;
+-        }
++        std::vector<std::string> stopSeqs = SplitStopSequences(cfg.stop);
++        if (!stopSeqs.empty())
++            request["stop"] = stopSeqs;
+ 
+         if (!cfg.systemPrompt.empty())
+             request["system"] = SanitizeUTF8(cfg.systemPrompt);
+@@ -170,7 +282,10 @@ namespace
+         // model does on its own is not something backing think off can fix.
+         result.thinkUsed = think.wanted;
+ 
+-        const nlohmann::json request = BuildRequest(cfg, prompt, think, reasoningReserve);
++        const bool openAI = IsOpenAIEndpoint(cfg.url);
++        const nlohmann::json request = openAI
++                                     ? BuildOpenAIRequest(cfg, prompt, think, reasoningReserve)
++                                     : BuildRequest(cfg, prompt, think, reasoningReserve);
+ 
+         const auto started = std::chrono::steady_clock::now();
+         OllamaHttpResult http = t_httpClient.PostEx(cfg.url, request.dump());
+@@ -196,7 +311,10 @@ namespace
+         }
+ 
+         std::string parseError;
+-        ParseGenerateBody(http.body, result.text, result.thinking, parseError);
++        if (openAI)
++            ParseChatCompletionBody(http.body, result.text, result.thinking, parseError);
++        else
++            ParseGenerateBody(http.body, result.text, result.thinking, parseError);
+ 
+         if (!parseError.empty())
+         {
+diff --git a/src/mod-ollama-chat_capability.cpp b/src/mod-ollama-chat_capability.cpp
+index 080109c..52062ac 100644
+--- a/src/mod-ollama-chat_capability.cpp
++++ b/src/mod-ollama-chat_capability.cpp
+@@ -218,6 +218,21 @@ void OllamaCapability_Init(bool force)
+         g_thinkLatencySum = 0;
+     }
+ 
++    // /api/show and /api/generate do not exist on OpenAI-compatible servers;
++    // reasoning there is a server-side choice, so do not ask for it.
++    if (g_OllamaUrl.find("/chat/completions") != std::string::npos)
++    {
++        SetSupport(OllamaThinkSupport::Unsupported,
++                   "OpenAI-compatible endpoint; reasoning is controlled by the server");
++        {
++            std::lock_guard<std::mutex> lock(g_mutex);
++            g_probeRunning = false;
++        }
++        LOG_INFO("module.ollamachat",
++                 "[Ollama Chat] OpenAI-compatible endpoint for model '{}'; skipping think-mode probe.", model);
++        return;
++    }
++
+     // Off the world thread: a missing Ollama must not stall startup.
+     std::thread(RunProbe, base, model).detach();
+ }
+diff --git a/src/mod-ollama-chat_httpclient.cpp b/src/mod-ollama-chat_httpclient.cpp
+index 8820fc1..6197418 100644
+--- a/src/mod-ollama-chat_httpclient.cpp
++++ b/src/mod-ollama-chat_httpclient.cpp
+@@ -51,8 +51,9 @@ namespace
+ 
+     httplib::Headers BuildHeaders(const std::string& host)
+     {
++        // Content-Type comes from the content_type argument of Post(); setting
++        // it here too sends the header twice, which some proxies reject.
+         httplib::Headers headers = {
+-            { "Content-Type", "application/json" },
+             { "User-Agent",   "AzerothCore-OllamaChat/2.0" },
+             { "Accept",       "application/json" },
+         };

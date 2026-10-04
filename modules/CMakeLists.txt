@@ -194,6 +194,18 @@ foreach(SOURCE_MODULE ${MODULES_MODULE_LIST})
 
   if((${MODULE_MODULE_VARIABLE} STREQUAL "disabled") OR
       (${MODULE_MODULE_VARIABLE} STREQUAL "static"))
+    if(SOURCE_MODULE STREQUAL "mod-ollama-chat" AND MOD_OLLAMA_CHAT STREQUAL "disabled")
+      message(STATUS "Module ${SOURCE_MODULE} is explicitly disabled and will not be compiled.")
+      continue()
+    endif()
+    if(SOURCE_MODULE STREQUAL "mod-ah-bot" AND MOD_AH_BOT STREQUAL "disabled")
+      message(STATUS "Module ${SOURCE_MODULE} is explicitly disabled and will not be compiled.")
+      continue()
+    endif()
+    if(SOURCE_MODULE STREQUAL "mod-playerbots" AND MOD_PLAYERBOTS STREQUAL "disabled")
+      message(STATUS "Module ${SOURCE_MODULE} is explicitly disabled and will not be compiled.")
+      continue()
+    endif()
 
     # Uninstall disabled modules
     GetProjectNameOfModuleName(${SOURCE_MODULE} MODULE_SOURCE_PROJECT_NAME)

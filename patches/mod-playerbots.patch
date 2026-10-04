@@ -1,0 +1,19 @@
+diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
+index dd2d5878..62d7acaa 100644
+--- a/src/Bot/RandomPlayerbotMgr.h
++++ b/src/Bot/RandomPlayerbotMgr.h
+@@ -179,6 +179,14 @@ public:
+ protected:
+     void OnBotLoginInternal(Player* const bot) override;
+ 
++public:
++    // Local patch for mod-dashboard-tools: lets it pin an LLM agent's randomize/logout/teleport timers.
++    uint32 GetBotEventValue(uint32 bot, std::string const& event) { return GetEventValue(bot, event); }
++    uint32 SetBotEventValue(uint32 bot, std::string const& event, uint32 value, uint32 validIn)
++    {
++        return SetEventValue(bot, event, value, validIn);
++    }
++
+ private:
+     RandomPlayerbotMgr() : PlayerbotHolder()
+     {
