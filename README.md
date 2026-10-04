@@ -67,8 +67,10 @@ Agents tab: persona, level chart, life story (thoughts, conversations, quests, l
 travel, deaths, parties, gear, gold) and memories. From there you can pause an agent, make it
 think now, nudge it with a suggestion, or start a new life.
 
-Agents only think while at least one real player is online, so an empty server makes no LLM
-calls. The Agents tab says whether they are living or resting.
+Agents live whenever the world server runs, with or without players. The idle manager
+(`server_manager.sh`, installed as `ac-manager.service`) stops the world server after 60 minutes
+without real players and starts it again on the next login; while it is stopped the agents
+rest and make no LLM calls. The Agents tab shows whether they are living or resting.
 
 Agents are listed in `characters.dash_agents`. The module stops the random bot manager from
 re-rolling, logging out or teleporting them, and `.dash reroll` re-rolls every bot except agents.

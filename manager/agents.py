@@ -6,6 +6,7 @@ small set of high-level actions that the mod-dashboard-tools module carries out 
 Everything an agent thinks, says and does is written to dash_agent_events so it can be
 watched in the dashboard.
 """
+import collections
 import json
 import random
 import re
@@ -85,10 +86,11 @@ class AgentRunner:
         self.cooldowns = {}           # (guid, kind, target) -> monotonic time when allowed again
         self.next_think = {}          # guid -> monotonic time
         self.think_now = set()
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.zone_ids = {}
         self.last_chat = {}
         self.world_awake = None
+        self.trails = collections.defaultdict(lambda: collections.deque(maxlen=120))   # guid -> (ts, zone, x, y)
 
     # ------------------------------------------------------------------ helpers
 
@@ -160,7 +162,9 @@ class AgentRunner:
             "zone_name": self.zone_name(num("zone")), "area_name": self.zone_name(num("area")),
             "map_name": self.map_name(num("map")), "hp": num("hp"), "alive": st.get("alive") == "1",
             "combat": st.get("combat") == "1", "gold": num("money") // 10000, "freebag": num("freebag"),
-            "ilvl": num("ilvl"), "played_h": round(num("played") / 3600, 1),
+            "ilvl": num("ilvl"), "played_s": num("played"), "played_h": round(num("played") / 3600, 1),
+            "map": num("map"), "area_id": num("area"),
+            "x": float((st.get("pos") or "0,0,0").split(",")[0]), "y": float((st.get("pos") or "0,0,0").split(",")[1]),
             "group": [g for g in st.get("group", "").split(",") if g],
             "quests": [q for q in st.get("quests", "").split("|") if q],
             "nearby": [],
@@ -371,29 +375,65 @@ class AgentRunner:
             self.event(guid, "say", say, state)
         return f"{kind}{(' ' + target) if target else ''}: {result}"
 
+    @staticmethod
+    def life_time(agent, state):
+        """Played time in this life (the counter includes the character's history before it became an agent)."""
+        if state.get("online") and agent.get("born_played") is not None:
+            state = dict(state)
+            state["played_h"] = round(max(0, state["played_s"] - agent["born_played"]) / 3600, 1)
+        return state
+
+    def observe(self, guid, name):
+        """Read the agent's state, record what changed since last time, and extend its trail."""
+        with self.lock:
+            old = self.states.get(guid)
+            state = self.read_state(name)
+            if state is None:
+                return None
+            if not state["online"]:
+                if old is None or old.get("online"):
+                    self.event(guid, "status", f"{name} is not in the world right now.")
+                self.states[guid] = state
+                return state
+            self.note_changes(guid, name, old, state)
+            self.note_conversations(guid, state)
+            self.states[guid] = state
+            trail = self.trails[guid]
+            point = (time.time(), state["zone_id"], round(state["x"]), round(state["y"]))
+            if not trail or trail[-1][1:] != point[1:]:
+                trail.append(point)
+            return state
+
+    def track_loop(self):
+        """Keep positions and events fresh between thoughts, for the live map."""
+        time.sleep(40)
+        while True:
+            try:
+                if self.enabled() and self.world_awake:
+                    for a in self.query("SELECT guid, name FROM acore_characters.dash_agents WHERE active = 1"):
+                        self.observe(a["guid"], a["name"])
+            except Exception as e:
+                self.app.logger.warning("agent tracker: %s", e)
+            time.sleep(20)
+
     def think(self, agent):
         guid, name = agent["guid"], agent["name"]
-        old = self.states.get(guid)
-        state = self.read_state(name)
-        if state is None:
+        state = self.observe(guid, name)
+        if not state or not state["online"]:
             return
-        if not state["online"]:
-            if old is None or old.get("online"):
-                self.event(guid, "status", f"{name} is not in the world right now.")
-            self.states[guid] = state
-            return
-        self.note_changes(guid, name, old, state)
-        self.note_conversations(guid, state)
-        self.states[guid] = state
 
         if not agent["born_at"]:
             # A new life starts at level 1, wherever the bot happened to be before.
             self.soap(f"dash agent reset {name}")
-            self.execute("UPDATE acore_characters.dash_agents SET born_at = NOW() WHERE guid = %s", (guid,))
             time.sleep(3)
             state = self.read_state(name) or state
-            self.states[guid] = state
+            # The character's played-time counter carries its whole history; this life starts now.
+            self.execute("UPDATE acore_characters.dash_agents SET born_at = NOW(), born_played = %s WHERE guid = %s",
+                         (state.get("played_s", 0), guid))
+            agent["born_played"] = state.get("played_s", 0)
             agent["born_at"] = True
+        state = self.life_time(agent, state)
+        self.states[guid] = state
         persona = self.ensure_persona(agent, state)
 
         players = self.real_players()
@@ -443,15 +483,16 @@ class AgentRunner:
         while True:
             try:
                 self.resolve_zones()
-                # Agents only live while someone is around to share the world with: no real player
-                # online means no LLM calls. The idle manager stops the server later anyway.
-                anyone = bool(self.real_players()) if self.enabled() else False
-                if self.enabled() and anyone != self.world_awake:
-                    self.world_awake = anyone
+                # Agents live whenever the world server is running, players or not. The idle manager
+                # (server_manager.sh) stops the server after an hour without real players, and then
+                # the agents rest until it starts again.
+                running = self.soap("dash who")[0] if self.enabled() else False
+                if self.enabled() and running != self.world_awake:
+                    self.world_awake = running
                     for a in self.query("SELECT guid, name FROM acore_characters.dash_agents WHERE active = 1"):
-                        self.event(a["guid"], "status", f"{a['name']} wakes up: someone is in the world." if anyone
-                                   else f"{a['name']} rests: no players online, thinking paused.")
-                if self.enabled() and anyone:
+                        self.event(a["guid"], "status", f"{a['name']} wakes up: the world is running." if running
+                                   else f"{a['name']} rests: the world server is stopped.")
+                if self.enabled() and running:
                     agents = self.query("SELECT * FROM acore_characters.dash_agents WHERE active = 1 ORDER BY guid")
                     now = time.monotonic()
                     for i, agent in enumerate(agents):
@@ -481,6 +522,10 @@ class AgentRunner:
         except OSError:
             return
         sql = "\n".join(line for line in sql.splitlines() if not line.strip().startswith("--"))
+        has = self.query("SELECT COUNT(*) AS n FROM information_schema.columns WHERE table_schema = 'acore_characters' "
+                         "AND table_name = 'dash_agents' AND column_name = 'born_played'")
+        if has and not has[0]["n"] and self.query("SHOW TABLES FROM acore_characters LIKE 'dash_agents'"):
+            self.execute("ALTER TABLE acore_characters.dash_agents ADD COLUMN born_played INT UNSIGNED NULL AFTER born_at")
         for stmt in [x.strip() for x in sql.split(";") if x.strip()]:
             self.execute(stmt.replace("CREATE TABLE IF NOT EXISTS `", "CREATE TABLE IF NOT EXISTS acore_characters.`")
                          .replace("INSERT IGNORE INTO `", "INSERT IGNORE INTO acore_characters.`"))
@@ -491,3 +536,4 @@ class AgentRunner:
         except Exception as e:
             self.app.logger.warning("agent tables: %s", e)
         threading.Thread(target=self.loop, daemon=True).start()
+        threading.Thread(target=self.track_loop, daemon=True).start()

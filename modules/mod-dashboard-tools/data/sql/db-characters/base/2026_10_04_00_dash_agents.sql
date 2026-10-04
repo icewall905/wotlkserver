@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS `dash_agents` (
   `last_action` VARCHAR(255) NULL,
   `last_think` DATETIME NULL,
   `born_at` DATETIME NULL,
+  `born_played` INT UNSIGNED NULL COMMENT 'played time (s) when this life began',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='LLM agents driven by ac-manager';
 

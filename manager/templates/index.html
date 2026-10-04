@@ -61,21 +61,57 @@ button.tele:hover { background: var(--code); }
 table.kv td { white-space: normal; padding: 5px 8px; }
 .meter { display: inline-block; width: 60px; height: 8px; background: var(--code); border-radius: 4px; vertical-align: middle; overflow: hidden; }
 .meter div { height: 100%; background: var(--accent); }
-.agentgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-bottom: 12px; }
-.agent { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; cursor: pointer; }
-.agent.sel { border-color: var(--accent); }
-.agent .nm { font-weight: 600; font-size: 15px; }
-.agent .lv { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.xpbar { height: 5px; background: var(--code); border-radius: 3px; overflow: hidden; margin: 4px 0 8px; }
-.xpbar div { height: 100%; background: var(--accent); }
-.agent .thought { font-style: italic; color: var(--muted); font-size: 12px; margin-top: 6px; max-height: 4.5em; overflow: hidden; }
-.timeline { max-height: 420px; overflow-y: auto; font-size: 13px; }
-.ev { padding: 6px 0; border-bottom: 1px solid var(--border); }
-.ev .k { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--code); color: var(--muted); margin-right: 6px; }
-.ev .k.levelup { color: var(--ok); } .ev .k.death { color: var(--bad); } .ev .k.say { color: var(--accent); }
-.ev .k.diary, .ev .k.born, .ev .k.goal { color: var(--warn); }
-.ev .k.chat { color: var(--accent); } .ev .k.quest { color: var(--ok); }
-.ev .t { color: var(--muted); font-size: 11px; }
+.agentgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.agent { background: var(--panel); border: 1px solid var(--border); border-top: 3px solid var(--cc); border-radius: 10px; padding: 12px; cursor: pointer; }
+.agent.sel { box-shadow: 0 0 0 2px var(--cc); }
+.portrait { position: relative; width: 48px; height: 48px; flex: none; }
+.portrait img.face { width: 48px; height: 48px; border-radius: 8px; border: 2px solid var(--cc); }
+.portrait img.cls { position: absolute; right: -6px; bottom: -6px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--panel); }
+.portrait .lvl { position: absolute; left: -6px; top: -6px; background: var(--panel); border: 1px solid var(--cc); border-radius: 10px; font-size: 11px; padding: 0 5px; font-weight: 600; }
+.agent .nm { font-weight: 600; font-size: 15px; color: var(--text); }
+.bar2 { height: 7px; background: var(--code); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+.bar2 div { height: 100%; }
+.bar2 .hp { background: #2ea043; } .bar2 .xp { background: #8957e5; }
+.minimap { position: relative; margin-top: 8px; border-radius: 6px; overflow: hidden; aspect-ratio: 1024/683; background: var(--code); }
+.minimap img, .mapbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.dot2 { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--cc); border: 2px solid #000; box-shadow: 0 0 0 3px rgba(255,255,255,.5); }
+.dot2.pulse { animation: pulse 1.6s infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.7); } 100% { box-shadow: 0 0 0 12px rgba(255,255,255,0); } }
+.agent .thought { font-style: italic; color: var(--muted); font-size: 12px; margin-top: 8px; max-height: 4.4em; overflow: hidden; }
+.agdetail { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.3fr) minmax(300px, 1.2fr); gap: 12px; margin-bottom: 12px; }
+@media (max-width: 1100px) { .agdetail { grid-template-columns: 1fr; } }
+.sheethead { display: flex; gap: 14px; align-items: center; }
+.sheethead .portrait, .sheethead .portrait img.face { width: 64px; height: 64px; }
+.sheethead .title { font-size: 18px; font-weight: 600; }
+.statgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+.stat { background: var(--code); border-radius: 6px; padding: 6px; text-align: center; }
+.stat b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 11px; color: var(--muted); }
+.paperdoll { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.slot { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
+.slot img { width: 30px; height: 30px; border-radius: 4px; border: 2px solid var(--qc, #555); flex: none; }
+.slot a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot.empty img { opacity: .25; }
+.questlog div { font-size: 13px; padding: 3px 0; border-bottom: 1px solid var(--border); }
+.mapbox { position: relative; border-radius: 8px; overflow: hidden; aspect-ratio: 1024/683; background: var(--code); }
+.mapbox svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.mapbox .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+.journey { display: flex; flex-wrap: wrap; gap: 6px; }
+.journey .stop { background: var(--code); border-radius: 14px; padding: 3px 10px; font-size: 12px; }
+.person { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.chip { font: inherit; font-size: 12px; padding: 2px 10px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.story { max-height: 640px; overflow-y: auto; font-size: 13px; }
+.day { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 0 4px; }
+.ev2 { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.ev2 img.ic { width: 24px; height: 24px; border-radius: 4px; flex: none; }
+.ev2 .body { min-width: 0; flex: 1; }
+.ev2 .meta { color: var(--muted); font-size: 11px; }
+.bubble { display: inline-block; background: var(--code); border-radius: 12px 12px 12px 2px; padding: 5px 10px; margin-top: 2px; }
+.ev2.thought .body { color: var(--muted); font-style: italic; }
+.ev2.levelup .body b.k, .ev2.quest .body b.k { color: var(--ok); } .ev2.death .body b.k { color: var(--bad); }
+.agview.active { border-color: var(--accent); color: var(--accent); }
 .persona p { margin: 4px 0; }
 .help { white-space: pre-wrap; color: var(--muted); font-size: 12px; }
 td.wrap { white-space: normal; }
@@ -137,27 +173,44 @@ a { color: var(--accent); }
 
 
   <section id="agents">
-    <div class="card"><div class="row">
-      <button class="btn" id="agToggle">…</button>
-      <span class="muted" id="agInfo">Five characters living whole lives: an LLM makes their life decisions every few minutes, playerbots plays them.</span>
-    </div></div>
-    <div class="agentgrid" id="agCards"></div>
-    <div class="split">
-      <div class="card" id="agDetail" style="display:none">
-        <div class="row" style="justify-content:space-between"><h3 id="agdName" style="margin:0"></h3>
-          <div class="row"><button class="btn" id="agdThink">Think now</button><button class="btn" id="agdNudge">Nudge…</button>
-          <button class="btn" id="agdPause">Pause</button><button class="btn danger" id="agdNew">New life</button></div></div>
-        <div id="agdPersona" class="persona"></div>
-        <h3 style="margin-top:12px">Level over time</h3><div id="agdChart"></div>
-        <div class="row" style="margin:12px 0 6px"><h3 style="margin:0">Life story</h3>
-          <select id="agdKinds"><option value="">everything</option><option value="diary,levelup,zone,death,group,goal,born,say,chat,quest">highlights</option>
-          <option value="thought">thoughts</option><option value="say,chat">conversations</option><option value="diary">diary</option>
-          <option value="quest">quests</option><option value="levelup">level-ups</option><option value="zone">travels</option>
-          <option value="death">deaths</option><option value="group">parties</option><option value="gear,gold">gear &amp; gold</option></select></div>
-        <div id="agdTimeline" class="timeline"></div>
-        <h3 style="margin-top:12px">Memories</h3><div id="agdMemories" class="timeline" style="max-height:220px"></div>
+    <div class="card"><div class="row" style="justify-content:space-between">
+      <div class="row"><button class="btn" id="agToggle">…</button><span class="muted" id="agInfo"></span></div>
+      <div class="row"><button class="btn agview active" data-view="board">Adventurers</button>
+        <button class="btn agview" data-view="leader">Leaderboard</button></div></div></div>
+    <div id="agBoardView">
+      <div class="agentgrid" id="agCards"></div>
+      <div class="agdetail" id="agDetail" style="display:none">
+        <div class="card agcol">
+          <div class="sheethead" id="agdHead"></div>
+          <div class="bars" id="agdBars"></div>
+          <div class="statgrid" id="agdStats"></div>
+          <div class="row" style="margin:10px 0 4px;gap:6px">
+            <button class="btn" id="agdThink">Think now</button><button class="btn" id="agdNudge">Nudge…</button>
+            <button class="btn" id="agdPause">Pause</button><button class="btn danger" id="agdNew">New life</button></div>
+          <h3 style="margin-top:14px">Equipment</h3><div class="paperdoll" id="agdGear"></div>
+          <h3 style="margin-top:14px">Quest log</h3><div id="agdQuests" class="questlog"></div>
+          <h3 style="margin-top:14px">Who they are</h3><div id="agdPersona" class="persona"></div>
+        </div>
+        <div class="card agcol">
+          <h3 id="agdMapTitle">Map</h3>
+          <div class="mapbox" id="agdMap"></div>
+          <h3 style="margin-top:14px">Level over time</h3><div id="agdChart"></div>
+          <h3 style="margin-top:14px">Journey</h3><div id="agdJourney" class="journey"></div>
+          <h3 style="margin-top:14px">People they know</h3><div id="agdPeople"></div>
+        </div>
+        <div class="card agcol">
+          <div class="row" style="justify-content:space-between"><h3 style="margin:0">Life story</h3></div>
+          <div class="chips" id="agdChips"></div>
+          <div id="agdTimeline" class="story"></div>
+          <h3 style="margin-top:14px">Memories</h3><div id="agdMemories" class="story" style="max-height:260px"></div>
+        </div>
       </div>
-      <div class="card"><h3>Live feed</h3><div id="agFeed" class="timeline" style="max-height:900px"></div></div>
+      <div class="card"><h3>World feed</h3><div class="chips" id="agFeedChips"></div><div id="agFeed" class="story" style="max-height:600px"></div></div>
+    </div>
+    <div id="agLeaderView" style="display:none">
+      <div class="card"><div class="tablewrap"><table id="agLeader"><thead><tr><th></th><th>Adventurer</th><th>Level</th><th>Zone</th>
+        <th>Quests</th><th>Deaths</th><th>Zones</th><th>Conversations</th><th>Gold</th><th>Item lvl</th><th>Played</th><th>Levels / h</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="card"><h3>Levels of all adventurers over time</h3><div id="agAllChart"></div></div>
     </div>
   </section>
 
@@ -482,74 +535,167 @@ document.querySelectorAll('[data-cmd]').forEach(b => b.onclick = () => { $('#cmd
 
 
 // agents
-let agents = [], agSel = null, agTimer = null;
-const KIND_LABEL = {thought: 'thinks', say: 'says', diary: 'diary', levelup: 'level up', zone: 'travel', death: 'died',
-  group: 'party', goal: 'goal', born: 'born', status: 'status', nudge: 'nudge', error: 'error', chat: 'conversation',
-  quest: 'quest', gear: 'gear', gold: 'gold'};
-const evRow = (e, withName) => `<div class="ev"><span class="k ${esc(e.kind)}">${esc(KIND_LABEL[e.kind] || e.kind)}</span>`
-  + `${withName ? `<b>${esc(e.name)}</b> ` : ''}${esc(e.kind === 'say' ? '"' + e.text + '"' : e.text)}`
-  + `<div class="t">${esc(e.ts)}${e.level ? ` · level ${e.level}` : ''}${e.zone ? ` · ${esc(e.zone)}` : ''}</div></div>`;
+let agents = [], agSel = null, agStoryKinds = '', agFeedKinds = '', agView = 'board';
+const ICO = n => `https://wow.zamimg.com/images/wow/icons/medium/${n}.jpg`;
+const KIND = {
+  thought: ['thinks', 'inv_inscription_scroll'], say: ['says', 'inv_letter_15'], chat: ['conversation', 'inv_letter_15'],
+  diary: ['diary', 'inv_misc_book_09'], levelup: ['level up', 'achievement_level_10'], zone: ['travel', 'inv_misc_map_01'],
+  death: ['died', 'spell_shadow_soulgem'], group: ['party', 'achievement_guildperk_everybodysfriend'],
+  goal: ['new goal', 'inv_scroll_03'], born: ['born', 'spell_holy_resurrection'], status: ['status', 'spell_nature_sleep'],
+  nudge: ['nudge', 'ability_spy'], error: ['error', 'inv_misc_questionmark'], quest: ['quest', 'inv_misc_note_01'],
+  gear: ['gear', 'inv_chest_chain_05'], gold: ['gold', 'inv_misc_coin_01']};
+const CHIPS = [['', 'Everything'], ['diary,levelup,zone,death,group,goal,born,quest,gear,gold', 'Milestones'],
+  ['say,chat', 'Conversations'], ['thought', 'Thoughts'], ['quest', 'Quests'], ['levelup', 'Level-ups'],
+  ['zone', 'Travels'], ['death', 'Deaths'], ['group', 'Parties'], ['diary', 'Diary']];
+const QCOLOR = ['#9d9d9d', '#ffffff', '#1eff00', '#0070dd', '#a335ee', '#ff8000', '#e6cc80', '#e6cc80'];
+const fmtDay = ts => new Date(ts.replace(' ', 'T')).toLocaleDateString(undefined, {weekday: 'long', month: 'short', day: 'numeric'});
+const fmtTime = ts => ts.slice(11, 16);
+const agentOf = guid => agents.find(a => a.guid === guid);
+function portrait(a, size) {
+  const st = a.state || {};
+  return `<div class="portrait" style="--cc:${a.visual.color}"><img class="face" src="${a.visual.portrait}" alt="">
+    <img class="cls" src="${a.visual.class_icon}" alt=""><span class="lvl">${st.level || '?'}</span></div>`;
+}
+function mapHtml(a, big) {
+  const m = a.map;
+  if (!m) return `<div class="empty">${a.state?.online ? 'No map for this place' : 'Not in the world'}</div>`;
+  const dot = m.pos ? `<div class="dot2 pulse" style="left:${m.pos[0] * 100}%;top:${m.pos[1] * 100}%;--cc:${a.visual.color}"></div>` : '';
+  const trail = big && m.trail.length > 1 ? `<svg viewBox="0 0 1000 1000" preserveAspectRatio="none"><polyline points="${
+    m.trail.map(t => `${t[0] * 1000},${t[1] * 1000}`).join(' ')}" fill="none" stroke="${a.visual.color}" stroke-width="6"
+    stroke-dasharray="14 10" stroke-linecap="round" opacity=".85" vector-effect="non-scaling-stroke"/></svg>` : '';
+  return `<img src="${m.url}" onerror="if(!this.dataset.f){this.dataset.f=1;this.src='${m.fallback}'}" alt="">${trail}${dot}`;
+}
+function evHtml(e, withName) {
+  const [label, icon] = KIND[e.kind] || [e.kind, 'inv_misc_questionmark'];
+  const a = agentOf(e.guid);
+  let body;
+  if (e.kind === 'say') body = `<div class="bubble">${esc(e.text)}</div>`;
+  else if (e.kind === 'chat') {
+    const m = e.text.match(/^(.*?): "(.*)" \/ replied: "(.*)"$/);
+    body = m ? `<div><b>${esc(m[1])}</b> <span class="bubble">${esc(m[2])}</span></div><div style="margin-top:3px">↳ <span class="bubble">${esc(m[3])}</span></div>` : esc(e.text);
+  } else if (e.kind === 'thought') {
+    const [th, act] = e.text.split(' -> ');
+    body = `${esc(th)}${act ? `<div class="meta" style="font-style:normal">→ ${esc(act)}</div>` : ''}`;
+  } else body = `<b class="k">${esc(label)}</b> ${esc(e.text)}`;
+  const who = withName && a ? `<b style="color:${a.visual.color}">${esc(e.name)}</b> ` : '';
+  const src = withName && a && ['say', 'chat', 'thought'].includes(e.kind) ? a.visual.class_icon : ICO(icon);
+  return `<div class="ev2 ${esc(e.kind)}"><img class="ic" src="${src}" alt="">
+    <div class="body">${who}${body}<div class="meta">${fmtTime(e.ts)}${e.level ? ` · level ${e.level}` : ''}${e.zone ? ` · ${esc(e.zone)}` : ''}</div></div></div>`;
+}
+function storyHtml(events, withName) {
+  let day = '', out = '';
+  for (const e of events) {
+    const d = fmtDay(e.ts);
+    if (d !== day) { day = d; out += `<div class="day">${esc(d)}</div>`; }
+    out += evHtml(e, withName);
+  }
+  return out || '<div class="muted">Nothing here yet.</div>';
+}
+function chips(el, current, onPick) {
+  el.innerHTML = CHIPS.map(([k, l]) => `<button class="chip ${k === current ? 'on' : ''}" data-k="${k}">${l}</button>`).join('');
+  el.querySelectorAll('.chip').forEach(c => c.onclick = () => onPick(c.dataset.k));
+}
 async function loadAgents() {
   const d = await api('/api/agents');
   if (!d.agents) return;
   agents = d.agents;
-  $('#agToggle').textContent = d.enabled ? 'Pause all agents' : 'Let agents think';
+  $('#agToggle').textContent = d.enabled ? 'Pause all agents' : 'Let agents live';
   $('#agToggle').dataset.on = d.enabled ? '1' : '0';
   $('#agInfo').textContent = !d.enabled ? 'Agents are paused by you.'
-    : d.awake ? 'Agents are living: each makes a life decision every 2-3 minutes while playerbots plays them.'
-    : 'Agents are resting: they only think while a real player is online.';
+    : d.awake ? 'Living: each makes a life decision every 2-3 minutes; positions update every 20 s.'
+    : 'Resting: the world server is stopped (it stops after an hour without players and starts on the next login).';
   $('#agCards').innerHTML = agents.map(a => {
     const st = a.state || {}, xp = st.xpnext ? Math.round(st.xp / st.xpnext * 100) : 0;
-    const status = !st.online ? '<span class="dot"></span>offline' : !st.alive ? '<span class="dot bad"></span>dead'
-      : st.combat ? '<span class="dot warn"></span>fighting' : '<span class="dot ok"></span>' + esc(st.area_name || st.zone_name || '');
-    return `<div class="agent ${agSel === a.guid ? 'sel' : ''}" onclick="selectAgent(${a.guid})">
-      <div class="row" style="justify-content:space-between"><span class="nm">${esc(a.name)}</span>
-        <span class="tag">${esc(st.faction || '')}</span></div>
-      <div class="muted">${esc(st.race || '')} ${esc(st.class || '')}${a.paused ? ' · <b>paused</b>' : ''}</div>
-      <div class="row" style="justify-content:space-between;align-items:flex-end"><span class="lv">${st.level || '–'}</span>
-        <span class="muted" style="font-size:12px">${status}</span></div>
-      <div class="xpbar"><div style="width:${xp}%"></div></div>
-      <div style="font-size:12px"><b>Goal:</b> ${esc(a.goal || '…')}</div>
+    const status = !st.online ? 'offline' : !st.alive ? '💀 dead' : st.combat ? '⚔ fighting' : esc(st.area_name || st.zone_name || '');
+    return `<div class="agent ${agSel === a.guid ? 'sel' : ''}" style="--cc:${a.visual.color}" onclick="selectAgent(${a.guid})">
+      <div class="row" style="gap:12px;align-items:center">${portrait(a)}
+        <div style="min-width:0;flex:1"><div class="nm">${esc(a.name)}${a.paused ? ' <span class="tag">paused</span>' : ''}</div>
+          <div class="muted" style="font-size:12px">${esc(st.race || '')} ${esc(st.class || '')} · ${esc(st.faction || '')}</div>
+          <div class="muted" style="font-size:12px">${status}</div></div></div>
+      <div class="bar2" title="Health ${st.hp ?? 0}%"><div class="hp" style="width:${st.online ? st.hp : 0}%"></div></div>
+      <div class="bar2" title="Experience ${xp}%"><div class="xp" style="width:${xp}%"></div></div>
+      <div class="minimap">${mapHtml(a, false)}</div>
+      <div style="font-size:12px;margin-top:8px"><b>Goal:</b> ${esc(a.goal || '…')}</div>
       <div class="thought">${esc(a.last_thought || 'Not awake yet.')}</div></div>`;
   }).join('');
-  const feed = await api('/api/agents/feed?limit=60');
-  $('#agFeed').innerHTML = feed.map(e => evRow(e, true)).join('') || '<div class="muted">Nothing yet. Agents think every 2-3 minutes.</div>';
+  chips($('#agFeedChips'), agFeedKinds, k => { agFeedKinds = k; loadAgents(); });
+  const feed = await api(`/api/agents/feed?limit=80&kinds=${encodeURIComponent(agFeedKinds)}`);
+  $('#agFeed').innerHTML = storyHtml(feed, true);
+  if (agView === 'leader') renderLeader();
   if (agSel) renderAgent();
 }
-async function selectAgent(guid) { agSel = guid; loadAgents(); }
-function levelChart(hist) {
-  if (hist.length < 2) return '<div class="muted">The chart appears after the first level-ups.</div>';
-  const t = hist.map(h => new Date(h.ts.replace(' ', 'T')).getTime()), t0 = t[0], t1 = Math.max(t[t.length - 1], t0 + 1);
-  const W = 600, H = 120, x = v => 30 + (v - t0) / (t1 - t0) * (W - 40), y = l => H - 15 - (l - 1) / 79 * (H - 25);
-  const pts = hist.map((h, i) => `${x(t[i]).toFixed(1)},${y(h.level).toFixed(1)}`).join(' ');
-  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">
-    ${[1, 20, 40, 60, 80].map(l => `<line x1="30" x2="${W - 10}" y1="${y(l)}" y2="${y(l)}" stroke="var(--border)"/><text x="4" y="${y(l) + 4}" font-size="10" fill="var(--muted)">${l}</text>`).join('')}
-    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>`;
+async function selectAgent(guid) { agSel = guid; await loadAgents(); $('#agDetail').scrollIntoView({behavior: 'smooth', block: 'start'}); }
+function levelChart(series, width = 600) {
+  const all = series.flatMap(s => s.hist.map(h => new Date(h.ts.replace(' ', 'T')).getTime()));
+  if (all.length < 2) return '<div class="muted">The chart fills in as they level up.</div>';
+  const t0 = Math.min(...all), t1 = Math.max(Math.max(...all), t0 + 60000), maxL = Math.max(10, ...series.flatMap(s => s.hist.map(h => h.level)));
+  const W = width, H = 150, x = v => 34 + (v - t0) / (t1 - t0) * (W - 44), y = l => H - 18 - (l - 1) / (maxL - 1 || 1) * (H - 30);
+  const ticks = [1, ...[10, 20, 30, 40, 50, 60, 70, 80].filter(l => l <= maxL)];
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${ticks.map(l => `<line x1="34" x2="${W - 10}" y1="${y(l)}" y2="${y(l)}" stroke="var(--border)"/><text x="4" y="${y(l) + 4}" font-size="10" fill="var(--muted)">${l}</text>`).join('')}
+    ${series.map(s => { const p = s.hist.map(h => `${x(new Date(h.ts.replace(' ', 'T')).getTime()).toFixed(1)},${y(h.level).toFixed(1)}`);
+      return p.length ? `<polyline points="${p.join(' ')}" fill="none" stroke="${s.color}" stroke-width="2.5"/>` + (s.label ? `<text x="${W - 8}" y="${p[p.length - 1].split(',')[1]}" font-size="10" text-anchor="end" fill="${s.color}">${esc(s.label)}</text>` : '') : ''; }).join('')}</svg>`;
 }
 async function renderAgent() {
-  const a = agents.find(x => x.guid === agSel); if (!a) return;
-  $('#agDetail').style.display = 'block';
-  const p = a.persona || {}, st = a.state || {};
-  $('#agdName').textContent = `${a.name}, level ${st.level || '?'} ${st.race || ''} ${st.class || ''}`;
+  const a = agentOf(agSel); if (!a) return;
+  $('#agDetail').style.display = 'grid';
+  const p = a.persona || {}, st = a.state || {}, xp = st.xpnext ? Math.round(st.xp / st.xpnext * 100) : 0, s = a.stats || {};
+  $('#agdHead').innerHTML = `${portrait(a)}<div><div class="title" style="color:${a.visual.color}">${esc(a.name)}</div>
+    <div class="muted">Level ${st.level || '?'} ${esc(st.race || '')} ${esc(st.class || '')} · ${esc(st.faction || '')}</div>
+    <div class="muted" style="font-size:12px">${esc(st.online ? (st.area_name ? st.area_name + ', ' : '') + (st.zone_name || '') : 'not in the world')}${(st.group || []).length ? ' · with ' + esc(st.group.map(g => g.split(':')[0]).join(', ')) : ''}</div></div>`;
+  $('#agdBars').innerHTML = `<div class="bar2" style="height:10px;margin-top:12px" title="Health"><div class="hp" style="width:${st.online ? st.hp : 0}%"></div></div>
+    <div class="bar2" style="height:10px" title="Experience"><div class="xp" style="width:${xp}%"></div></div>
+    <div class="muted" style="font-size:11px;margin-top:3px">Health ${st.hp ?? 0}% · XP ${st.xp ?? 0} / ${st.xpnext ?? 0} (${xp}%)</div>`;
+  const lph = st.played_h ? (Math.max(0, (st.level || 1) - 1) / st.played_h).toFixed(1) : '–';
+  $('#agdStats').innerHTML = [['Gold', st.gold ?? '–'], ['Item lvl', st.ilvl ?? '–'], ['Played', (st.played_h ?? 0) + 'h'], ['Lvl / h', lph],
+    ['Quests', s.quests], ['Deaths', s.deaths], ['Zones', s.zones], ['Talks', s.chats]]
+    .map(([l, v]) => `<div class="stat"><b>${v ?? 0}</b><span>${l}</span></div>`).join('');
   $('#agdPause').textContent = a.paused ? 'Resume' : 'Pause';
+  $('#agdQuests').innerHTML = (st.quests || []).map(q => `<div>${esc(q.replace(' [done]', ''))} ${q.endsWith('[done]') ? '<span class="tag" style="color:var(--ok)">ready to turn in</span>' : ''}</div>`).join('') || '<div class="muted">Empty quest log.</div>';
   $('#agdPersona').innerHTML = p.personality ? `<p>${esc(p.personality)}</p><p class="muted">${esc(p.background || '')}</p>
-    <p><b>Ambition:</b> ${esc(p.ambition || '')}</p><p><b>Quirk:</b> ${esc(p.quirks || '')}</p>
-    <p class="muted">Gold ${st.gold ?? '–'} · item level ${st.ilvl ?? '–'} · played ${st.played_h ?? '–'} h · ${esc((st.group || []).length ? 'with ' + st.group.map(g => g.split(':')[0]).join(', ') : 'solo')}</p>
-    <p class="muted"><b>Last action:</b> ${esc(a.last_action || '')}</p>` : '<p class="muted">Not born yet: the first thought creates their persona.</p>';
-  $('#agdChart').innerHTML = levelChart(a.level_history);
-  const ev = await api(`/api/agents/feed?guid=${a.guid}&limit=150&kinds=${encodeURIComponent($('#agdKinds').value)}`);
-  $('#agdTimeline').innerHTML = ev.map(e => evRow(e, false)).join('') || '<div class="muted">No events yet.</div>';
-  const mem = await api(`/api/agents/${a.guid}/memories`);
-  $('#agdMemories').innerHTML = mem.map(m => `<div class="ev"><span class="k">${m.importance}/10</span>${esc(m.text)}${m.about ? ` <span class="muted">(${esc(m.about)})</span>` : ''}<div class="t">${esc(m.ts)}</div></div>`).join('') || '<div class="muted">No memories yet.</div>';
+    <p><b>Ambition:</b> ${esc(p.ambition || '')}</p><p><b>Quirk:</b> ${esc(p.quirks || '')}</p><p><b>Current goal:</b> ${esc(a.goal || '')}</p>
+    ${a.nudge ? `<p><b>Pending nudge:</b> ${esc(a.nudge)}</p>` : ''}<p class="muted"><b>Last action:</b> ${esc(a.last_action || '')}</p>`
+    : '<p class="muted">Not born yet: the first thought creates their persona.</p>';
+  $('#agdMapTitle').textContent = a.map ? `Map: ${a.map.name}` : 'Map';
+  $('#agdMap').innerHTML = mapHtml(a, true);
+  $('#agdChart').innerHTML = levelChart([{hist: a.level_history, color: a.visual.color}]);
+  chips($('#agdChips'), agStoryKinds, k => { agStoryKinds = k; renderAgent(); });
+  const [ev, mem, sheet] = await Promise.all([
+    api(`/api/agents/feed?guid=${a.guid}&limit=300&kinds=${encodeURIComponent(agStoryKinds)}`),
+    api(`/api/agents/${a.guid}/memories`), api(`/api/agents/${a.guid}/sheet`)]);
+  $('#agdTimeline').innerHTML = storyHtml(ev, false);
+  $('#agdMemories').innerHTML = mem.map(m => `<div class="ev2"><span class="tag" style="flex:none">${m.importance}/10</span><div class="body">${esc(m.text)}${m.about ? ` <span class="muted">(${esc(m.about)})</span>` : ''}<div class="meta">${esc(m.ts)}</div></div></div>`).join('') || '<div class="muted">No memories yet.</div>';
+  const bySlot = Object.fromEntries((sheet.equipment || []).map(g => [g.slot_id, g]));
+  const order = [0, 9, 1, 5, 2, 6, 14, 7, 4, 10, 3, 11, 18, 12, 8, 13, 15, 16, 17];
+  $('#agdGear').innerHTML = order.map(i => { const g = bySlot[i];
+    return g ? `<div class="slot" style="--qc:${QCOLOR[g.quality] || '#555'}"><img src="${g.icon}" alt=""><a href="https://www.wowhead.com/wotlk/item=${g.entry}" target="_blank" rel="noopener" class="q${g.quality}" title="${esc(g.name)} (item level ${g.ilvl})">${esc(g.name)}</a></div>`
+      : `<div class="slot empty"><img src="${ICO('inv_misc_questionmark')}" alt=""><span class="muted">${['Head','Neck','Shoulder','Shirt','Chest','Waist','Legs','Feet','Wrist','Hands','Finger','Finger','Trinket','Trinket','Back','Main hand','Off hand','Ranged','Tabard'][i]}</span></div>`; }).join('');
+  $('#agdJourney').innerHTML = (sheet.journey || []).map((j, i) => `${i ? '<span class="muted">→</span>' : ''}<span class="stop" title="first ${esc(j.first)}">${esc(j.zone)} <span class="muted">lvl ${j.level ?? '?'}</span></span>`).join(' ')
+    || '<div class="muted">No travels yet.</div>';
+  $('#agdPeople').innerHTML = (sheet.people || []).slice(0, 12).map(pp => `<div class="person"><div><b>${esc(pp.name)}</b>${pp.note ? `<div class="muted" style="font-size:12px">${esc(pp.note)}</div>` : ''}</div>
+    <div class="muted" style="white-space:nowrap">${pp.talks ? pp.talks + ' talks' : ''}${pp.talks && pp.memories ? ' · ' : ''}${pp.memories ? pp.memories + ' memories' : ''}</div></div>`).join('') || '<div class="muted">Nobody yet.</div>';
 }
-$('#agdKinds').onchange = renderAgent;
+function renderLeader() {
+  const rows = [...agents].sort((x, y) => (y.state?.level || 0) - (x.state?.level || 0) || (y.state?.xp || 0) - (x.state?.xp || 0));
+  $('#agLeader tbody').innerHTML = rows.map((a, i) => { const st = a.state || {}, s = a.stats || {};
+    const lph = st.played_h ? (Math.max(0, (st.level || 1) - 1) / st.played_h).toFixed(1) : '–';
+    return `<tr style="cursor:pointer" onclick="agView='board';document.querySelector('.agview[data-view=board]').click();selectAgent(${a.guid})">
+      <td>${i + 1}</td><td><div class="row" style="gap:10px">${portrait(a)}<div><b style="color:${a.visual.color}">${esc(a.name)}</b><div class="muted" style="font-size:12px">${esc(st.race || '')} ${esc(st.class || '')}</div></div></div></td>
+      <td><b>${st.level || '–'}</b></td><td>${esc(st.zone_name || '–')}</td><td>${s.quests}</td><td>${s.deaths}</td><td>${s.zones}</td><td>${s.chats}</td>
+      <td>${st.gold ?? '–'}</td><td>${st.ilvl ?? '–'}</td><td>${st.played_h ?? 0} h</td><td>${lph}</td></tr>`; }).join('');
+  $('#agAllChart').innerHTML = levelChart(agents.map(a => ({hist: a.level_history, color: a.visual.color, label: a.name})), 900);
+}
+document.querySelectorAll('.agview').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.agview').forEach(x => x.classList.remove('active')); b.classList.add('active');
+  agView = b.dataset.view; $('#agBoardView').style.display = agView === 'board' ? '' : 'none';
+  $('#agLeaderView').style.display = agView === 'leader' ? '' : 'none'; if (agView === 'leader') renderLeader();
+});
 const agAct = (action, body) => act(event.target, () => api(`/api/agents/${agSel}/${action}`, {method: 'POST', body})).then(loadAgents);
 $('#agdThink').onclick = () => agAct('think');
-$('#agdPause').onclick = () => agAct(agents.find(x => x.guid === agSel)?.paused ? 'resume' : 'pause');
+$('#agdPause').onclick = () => agAct(agentOf(agSel)?.paused ? 'resume' : 'pause');
 $('#agdNudge').onclick = () => { const t = prompt('Suggest something to this agent (they decide whether to follow it), e.g. "Go meet Thorn in Redridge":'); if (t) agAct('nudge', {text: t}); };
 $('#agdNew').onclick = () => confirm('End this life and start over at level 1 with a new persona and no memories?') && agAct('newlife');
 $('#agToggle').onclick = e => act(e.target, () => api('/api/agents/enabled', {method: 'POST', body: {on: e.target.dataset.on !== '1'}})).then(loadAgents);
-setInterval(() => { if ($('#agents').classList.contains('active')) loadAgents(); }, 10000);
+setInterval(() => { if ($('#agents').classList.contains('active')) loadAgents(); }, 15000);
 
 // activity
 async function loadActivity() {

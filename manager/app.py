@@ -135,6 +135,66 @@ ZONES = load_dbc_names(AREA_DBC, 11)
 MAP_NAMES = load_dbc_names(MAP_DBC, 5)
 
 
+def load_zone_bounds():
+    """Zone id -> (left, right, top, bottom) world coordinates of its in-game map (WorldMapArea.dbc)."""
+    try:
+        with open("/dbc/WorldMapArea.dbc", "rb") as f:
+            data = f.read()
+        _, count, _, rec_size, _ = struct.unpack("<4s4I", data[:20])
+        out = {}
+        for i in range(count):
+            _id, _map, area, _name, left, right, top, bottom, display_map, _floor, _parent = \
+                struct.unpack_from("<3I I 4f 3i", data, 20 + i * rec_size)
+            # Draenei/blood elf zones carry a display map (shown on Kalimdor/EK); keep them too,
+            # but prefer the plain entry when a zone has several.
+            if area and (display_map == -1 or area not in out):
+                out[area] = (left, right, top, bottom)
+        return out
+    except (OSError, struct.error):
+        return {}
+
+
+def load_item_icons():
+    """Item display id -> icon name (ItemDisplayInfo.dbc)."""
+    try:
+        with open("/dbc/ItemDisplayInfo.dbc", "rb") as f:
+            data = f.read()
+        _, count, fields, rec_size, _ = struct.unpack("<4s4I", data[:20])
+        strings = data[20 + count * rec_size:]
+        out = {}
+        for i in range(count):
+            rec = struct.unpack_from(f"<{fields}I", data, 20 + i * rec_size)
+            off = rec[5]
+            if off:
+                out[rec[0]] = strings[off:strings.index(b"\0", off)].decode("ascii", "replace").lower()
+        return out
+    except (OSError, struct.error, ValueError):
+        return {}
+
+
+ZONE_BOUNDS = load_zone_bounds()
+ITEM_ICONS = load_item_icons()
+ICON_URL = "https://wow.zamimg.com/images/wow/icons/{size}/{name}.jpg"
+CLASS_COLORS = {1: "#C79C6E", 2: "#F58CBA", 3: "#ABD473", 4: "#FFF569", 5: "#FFFFFF", 6: "#C41F3B",
+                7: "#0070DE", 8: "#69CCF0", 9: "#9482C9", 11: "#FF7D0A"}
+CLASS_ICON = {1: "warrior", 2: "paladin", 3: "hunter", 4: "rogue", 5: "priest", 6: "deathknight", 7: "shaman",
+              8: "mage", 9: "warlock", 11: "druid"}
+RACE_ICON = {1: "human", 2: "orc", 3: "dwarf", 4: "nightelf", 5: "scourge", 6: "tauren", 7: "gnome", 8: "troll",
+             10: "bloodelf", 11: "draenei"}
+
+
+def map_point(zone_id, x, y):
+    """Position as a fraction of the zone's map image (WoW: x points north, y points west)."""
+    b = ZONE_BOUNDS.get(zone_id)
+    if not b:
+        return None
+    left, right, top, bottom = b
+    px, py = (left - y) / (left - right), (top - x) / (top - bottom)
+    if not (-0.05 <= px <= 1.05 and -0.05 <= py <= 1.05):
+        return None
+    return round(px, 4), round(py, 4)
+
+
 def map_name(map_id):
     return MAP_NAMES.get(map_id) or MAPS.get(map_id, f"Map {map_id}")
 
@@ -1299,19 +1359,87 @@ def _iso(v):
 @requires_auth
 def api_agents():
     rows = query("SELECT guid, name, active, paused, persona, goal, nudge, last_thought, last_action, last_think, "
-                 "born_at FROM acore_characters.dash_agents WHERE active = 1 ORDER BY name")
+                 "born_at, born_played FROM acore_characters.dash_agents WHERE active = 1 ORDER BY name")
     levels = query("SELECT guid, ts, level FROM acore_characters.dash_agent_events WHERE kind IN ('levelup','born') "
                    "ORDER BY id")
     history = {}
     for r in levels:
         history.setdefault(r["guid"], []).append({"ts": _iso(r["ts"]), "level": r["level"] or 1})
+    chars = {c["guid"]: c for c in query(
+        "SELECT guid, race, class, gender FROM acore_characters.characters WHERE guid IN "
+        "(SELECT guid FROM acore_characters.dash_agents)")}
+    counts = {}
+    for c in query("SELECT guid, kind, COUNT(*) AS n, COUNT(DISTINCT zone) AS z FROM acore_characters.dash_agent_events "
+                   "GROUP BY guid, kind"):
+        counts.setdefault(c["guid"], {})[c["kind"]] = c["n"]
     out = []
     for r in rows:
         persona = json.loads(r["persona"]) if r["persona"] else {}
-        st = agent_runner.states.get(r["guid"]) or {}
+        st = agent_runner.life_time(r, agent_runner.states.get(r["guid"]) or {})
+        ch = chars.get(r["guid"], {})
+        cls, race = ch.get("class"), ch.get("race")
+        visual = {
+            "color": CLASS_COLORS.get(cls, "#888"),
+            "class_icon": ICON_URL.format(size="medium", name=f"classicon_{CLASS_ICON.get(cls, 'warrior')}"),
+            "portrait": ICON_URL.format(size="large", name=f"race_{RACE_ICON.get(race, 'human')}_"
+                                                            f"{'female' if ch.get('gender') else 'male'}"),
+        }
+        mp = None
+        if st.get("online") and st.get("zone_id"):
+            here = map_point(st["zone_id"], st.get("x", 0), st.get("y", 0))
+            trail = [map_point(z, x, y) for (_, z, x, y) in agent_runner.trails.get(r["guid"], [])
+                     if z == st["zone_id"]]
+            mp = {"zone": st["zone_id"], "name": st.get("zone_name"), "pos": here,
+                  "trail": [t for t in trail if t],
+                  "url": f"https://wow.zamimg.com/images/wow/wrath/maps/enus/original/{st['zone_id']}.jpg",
+                  "fallback": f"https://wow.zamimg.com/images/wow/maps/enus/original/{st['zone_id']}.jpg"}
+        c = counts.get(r["guid"], {})
+        stats = {"quests": c.get("quest", 0), "deaths": c.get("death", 0), "zones": c.get("zone", 0),
+                 "levelups": c.get("levelup", 0), "chats": c.get("chat", 0) + c.get("say", 0),
+                 "thoughts": c.get("thought", 0)}
         out.append({**{k: _iso(v) for k, v in r.items() if k != "persona"}, "persona": persona, "state": st,
-                    "level_history": history.get(r["guid"], [])})
+                    "visual": visual, "map": mp, "stats": stats, "level_history": history.get(r["guid"], [])})
     return jsonify(enabled=agent_runner.enabled(), awake=bool(agent_runner.world_awake), agents=out)
+
+
+EQUIP_SLOTS = ["Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands",
+               "Finger", "Finger", "Trinket", "Trinket", "Back", "Main Hand", "Off Hand", "Ranged", "Tabard"]
+
+
+@app.get("/api/agents/<int:guid>/sheet")
+@requires_auth
+def api_agent_sheet(guid):
+    gear = query(
+        "SELECT ci.slot, it.entry, it.name, it.Quality, it.ItemLevel, it.displayid "
+        "FROM acore_characters.character_inventory ci "
+        "JOIN acore_characters.item_instance ii ON ii.guid = ci.item "
+        "JOIN acore_world.item_template it ON it.entry = ii.itemEntry "
+        "WHERE ci.guid = %s AND ci.bag = 0 AND ci.slot < 19 ORDER BY ci.slot", (guid,))
+    equipment = [{"slot": EQUIP_SLOTS[g["slot"]], "slot_id": g["slot"], "entry": g["entry"], "name": g["name"],
+                  "quality": g["Quality"], "ilvl": g["ItemLevel"],
+                  "icon": ICON_URL.format(size="medium", name=ITEM_ICONS.get(g["displayid"], "inv_misc_questionmark"))}
+                 for g in gear]
+    journey = query("SELECT MIN(ts) AS first, MAX(ts) AS last, zone, MIN(level) AS level, COUNT(*) AS visits "
+                    "FROM acore_characters.dash_agent_events WHERE guid = %s AND kind = 'zone' AND zone IS NOT NULL "
+                    "GROUP BY zone ORDER BY first", (guid,))
+    people = {}
+    for m in query("SELECT about, COUNT(*) AS n, MAX(importance) AS imp, MAX(text) AS text "
+                   "FROM acore_characters.dash_agent_memories m WHERE guid = %s AND about IS NOT NULL AND about <> '' "
+                   "AND EXISTS (SELECT 1 FROM acore_characters.characters c WHERE c.name = m.about) "
+                   "GROUP BY about", (guid,)):
+        people[m["about"]] = {"name": m["about"], "memories": m["n"], "importance": m["imp"], "note": m["text"],
+                              "talks": 0}
+    for c in query("SELECT c.name, COUNT(*) AS n FROM acore_characters.mod_ollama_chat_history h "
+                   "JOIN acore_characters.characters c ON c.guid = h.player_guid WHERE h.bot_guid = %s "
+                   "GROUP BY c.name", (guid,)):
+        people.setdefault(c["name"], {"name": c["name"], "memories": 0, "importance": 0, "note": "", "talks": 0})
+        people[c["name"]]["talks"] = c["n"]
+    born = query("SELECT born_at FROM acore_characters.dash_agents WHERE guid = %s", (guid,))
+    first = query("SELECT MIN(ts) AS t FROM acore_characters.dash_agent_events WHERE guid = %s AND kind = 'born'", (guid,))
+    return jsonify(equipment=equipment,
+                   journey=[{**j, "first": _iso(j["first"]), "last": _iso(j["last"])} for j in journey],
+                   people=sorted(people.values(), key=lambda p: -(p["talks"] * 2 + p["memories"] + p["importance"])),
+                   born=_iso(first[0]["t"] if first and first[0]["t"] else (born[0]["born_at"] if born else None)))
 
 
 @app.get("/api/agents/feed")
@@ -1365,7 +1493,7 @@ def api_agent_action(guid, action):
         agent_runner.think_now.add(guid)
         return jsonify(ok=True, output=f"{name} will consider it.")
     if action == "newlife":
-        execute("UPDATE acore_characters.dash_agents SET born_at = NULL, persona = NULL, goal = NULL, "
+        execute("UPDATE acore_characters.dash_agents SET born_at = NULL, born_played = NULL, persona = NULL, goal = NULL, "
                 "last_thought = NULL, last_action = NULL WHERE guid = %s", (guid,))
         execute("DELETE FROM acore_characters.dash_agent_memories WHERE guid = %s", (guid,))
         agent_runner.event(guid, "status", f"{name}'s old life ends. A new one begins.")
