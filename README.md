@@ -1,8 +1,16 @@
-# Family WotLK server: playerbots, AI chat, LLM agents and a web dashboard
+# wotlkserver: a family AzerothCore server with playerbots, AI chat and LLM agents
 
-This repository is an [AzerothCore](https://www.azerothcore.org) (Playerbot branch fork) setup for a small
-private server: about 1000 playerbots, AI chat through an OpenAI-compatible LLM endpoint, five
-**LLM agents** that live whole lives in the game, and a web dashboard to run all of it.
+> **This is a fork of [AzerothCore](https://github.com/azerothcore/azerothcore-wotlk)**, by way of the
+> [mod-playerbots fork](https://github.com/mod-playerbots/azerothcore-wotlk) (its `Playerbot` branch).
+> The game server, its database and nearly all of the code in this repository are AzerothCore's work,
+> and the bots come from [mod-playerbots](https://github.com/mod-playerbots/mod-playerbots). What this
+> fork adds is listed below: a web dashboard, LLM agents, a small server module, scripts and a few
+> patches. AzerothCore is licensed under the GNU GPL v2 (see `LICENSE`), and so is this fork.
+> Upstream changes are merged from the Playerbot branch.
+
+This repository is the setup for a small private server: about 1000 playerbots, AI chat through an
+OpenAI-compatible LLM endpoint, five **LLM agents** that live whole lives in the game, and a web
+dashboard to run all of it.
 
 ## What is here
 
