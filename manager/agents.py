@@ -637,6 +637,7 @@ class AgentRunner:
             ok, result = run(f"dash learn {name}")
         elif kind == "gear_up":
             ok, result = run(f"dash autogear {name} blue")
+            run(f"dash sell {name}")
         elif kind == "goto_player" and target.lower() in real_names:
             p = real_names[target.lower()]
             if p.get("faction_ok", True) and self.cooldown_ok(guid, "goto", target, GOTO_COOLDOWN):
@@ -772,6 +773,10 @@ class AgentRunner:
             agent["born_at"] = True
         state = self.life_time(agent, state)
         self.states[guid] = state
+        if state.get("freebag", 99) <= 2 and not state.get("combat"):
+            ok, out = self.soap(f"dash sell {name}")
+            if ok:
+                self.event(guid, "gear", f"Visited a vendor: {_strip(out, 200)}", state)
         persona = self.ensure_persona(agent, state)
         persona = self.upgrade_persona(agent, state, persona)
         self.maybe_converse(agent, state)

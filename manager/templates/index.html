@@ -240,14 +240,15 @@ a { color: var(--accent); }
         <p class="muted" style="margin-top:0">Logs an alt from the same account in as a bot that joins your party. The selected character must be online. <b>Ready up</b> levels the alt to you, learns its spells and gears it, without touching talents or action bars.
           While an alt is in your party it follows you, so its saved location moves with you.</p>
         <div class="row" style="margin-bottom:8px"><button class="btn" id="summonAll">Summon all my bots to me</button>
-          <button class="btn primary" id="fullMaint" title="Level to you, learn spells, maintenance (talents, glyphs, bags, consumables), autogear up to legendary">Full maintenance for all my bots</button></div>
+          <button class="btn primary" id="fullMaint" title="Level to you, learn spells, maintenance (talents, glyphs, bags, consumables), autogear up to legendary, sell junk">Full maintenance for all my bots</button></div>
         <div class="tablewrap"><table id="altTable"><tbody></tbody></table></div></div>
       <div class="card"><h3>Give gold</h3>
         <div class="row"><input id="goldAmt" type="number" value="100" style="width:120px"> gold
           <button class="btn primary" id="goldBtn">Give</button></div>
         <p class="muted">Negative removes gold. Offline characters get it by mail.</p>
         <h3 style="margin-top:16px">Spells &amp; skills</h3>
-        <div class="row"><button class="btn primary" id="learnBtn">Learn spells &amp; skills</button></div>
+        <div class="row"><button class="btn primary" id="learnBtn">Learn spells &amp; skills</button>
+          <button class="btn" id="sellBtn" title="Sell grey items and common/uncommon gear that is unusable or worse than what is equipped">Sell junk</button></div>
         <p class="muted">Every class spell and rank a trainer would teach at the current level (free), plus weapon and defense skills maxed. Talents are untouched.</p>
         <h3 style="margin-top:16px">Autogear</h3>
         <div class="row"><select id="gearQ"><option value="green">green</option><option value="blue">blue</option><option value="epic">epic</option><option value="legendary" selected>legendary</option></select>
@@ -761,7 +762,7 @@ function renderChar() {
   $('#altTable tbody').innerHTML = alts.length ? alts.map(a => `<tr><td>${esc(a.name)}</td><td>${a.level} ${esc(a.class)}</td>
     <td>${a.online ? '<span class="dot ok"></span>online' : '<span class="muted">offline</span>'}</td>
     <td class="wrap">${a.online
-      ? `<button class="btn primary" onclick="altReady('${esc(a.name)}',this)" title="Level to ${c.level}, learn spells and skills, autogear up to legendary (talents untouched)">Ready up</button>
+      ? `<button class="btn primary" onclick="altReady('${esc(a.name)}',this)" title="Level to ${c.level}, learn spells and skills, autogear up to legendary, sell junk (talents untouched)">Ready up</button>
          <button class="btn" onclick="altbot('${esc(a.name)}','invite',this)" title="Put into your party / fix the party">Invite</button>
          <button class="btn" onclick="summon('${esc(a.name)}',this)">Summon</button>
          <button class="btn" onclick="altLevel('${esc(a.name)}',this)">Level to ${c.level}</button>
@@ -807,7 +808,7 @@ async function summon(target, btn) {
 }
 $('#summonAll').onclick = e => summon('all', e.target);
 $('#fullMaint').onclick = async e => {
-  if (!confirm(`Full maintenance for every bot with ${ch()}: level them to you, learn spells, maintenance and autogear.\n\n`
+  if (!confirm(`Full maintenance for every bot with ${ch()}: level them to you, learn spells, maintenance, autogear and sell junk.\n\n`
                + `Maintenance RESETS and re-picks their talents. Only for bot companions nobody plays by hand. Continue?`)) return;
   const btn = e.target, label = btn.textContent; btn.textContent = 'Working…';
   const d = await act(btn, () => api('/api/altbot/fullmaint', {method: 'POST', body: {master: ch()}}));
@@ -842,6 +843,7 @@ async function teleport(id, btn) {
 }
 $('#teleMap').onchange = renderTeles;
 $('#learnBtn').onclick = e => act(e.target, () => api('/api/character/learn', {method: 'POST', body: {character: ch()}}));
+$('#sellBtn').onclick = e => act(e.target, () => api('/api/character/sell', {method: 'POST', body: {character: ch()}}));
 async function altLearn(bot, btn) { await act(btn, () => api('/api/character/learn', {method: 'POST', body: {character: bot}})); }
 $('#gearBtn').onclick = e => act(e.target, () => api('/api/character/autogear', {method: 'POST', body: {character: ch(), quality: $('#gearQ').value}}));
 $('#reviveBtn').onclick = e => act(e.target, () => api('/api/character/revive', {method: 'POST', body: {character: ch()}}));

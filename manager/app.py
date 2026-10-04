@@ -762,6 +762,9 @@ def api_altbot_ready():
         return jsonify(ok=False, output="\n".join(steps))
     ok, out = soap(f"dash autogear {bot} legendary", timeout=60)
     steps.append(out)
+    if ok:
+        ok, out = soap(f"dash sell {bot}", timeout=60)
+        steps.append(out)
     return jsonify(ok=ok, output="\n".join(steps))
 
 
@@ -792,7 +795,8 @@ def api_altbot_fullmaint():
             time.sleep(0.5)
         for label, cmd in (("learn", f"dash learn {bot}"),
                            ("maintenance", f"dash botcmd {master} {bot} maintenance"),
-                           ("autogear", f"dash autogear {bot} legendary")):
+                           ("autogear", f"dash autogear {bot} legendary"),
+                           ("sold junk", f"dash sell {bot}")):
             ok, out = soap(cmd, timeout=60)
             steps.append(label if ok else f"{label} failed: {out}")
         report.append(f"{bot}: " + ", ".join(steps))
@@ -885,6 +889,10 @@ def api_character_action(action):
         if not char_online(character):
             return jsonify(ok=False, output=f"{character} must be online"), 400
         ok, out = soap(f"dash learn {character}", timeout=60)
+    elif action == "sell":
+        if not char_online(character):
+            return jsonify(ok=False, output=f"{character} must be online"), 400
+        ok, out = soap(f"dash sell {character}", timeout=60)
     elif action == "revive":
         ok, out = soap(f"revive {character}")
     elif action == "kick":

@@ -15,4 +15,5 @@ the server console and SOAP where no player session exists.
 | `.dash learn <player>` | Learn all trainer class spells for the current level, quest-reward spells, and max weapon/defense skills |
 | `.dash who` | Tab-separated snapshot of real players (with their bots) and bot totals, for the dashboard |
 | `.dash additem <player> <itemId> [count]` | Put items straight into the player's bags |
+| `.dash sell <player>` | Sell vendor trash from the bags: grey items, and common/uncommon gear the character cannot use or has better of |
 | `.dash addmoney <player> <copper>` | Add (or remove, if negative) money |

@@ -12,6 +12,7 @@
 #include "CommandScript.h"
 #include "ObjectAccessor.h"
 #include "ObjectMgr.h"
+#include "Bag.h"
 #include "Player.h"
 #include "Trainer.h"
 #include "Playerbots.h"
@@ -73,6 +74,7 @@ public:
             { "who",      HandleWho,      SEC_ADMINISTRATOR, Console::Yes },
             { "additem",  HandleAddItem,  SEC_ADMINISTRATOR, Console::Yes },
             { "addmoney", HandleAddMoney, SEC_ADMINISTRATOR, Console::Yes },
+            { "sell",     HandleSell,     SEC_ADMINISTRATOR, Console::Yes },
         };
 
         static ChatCommandTable commandTable =
@@ -527,6 +529,90 @@ public:
     }
 
     // .dash addmoney <player> <copper>
+    // Whether a vendor trip would get rid of this item: grey junk, or common/uncommon armour and
+    // weapons the character cannot use or that are no better than what it already wears.
+    static bool IsVendorTrash(Player* player, Item* item)
+    {
+        ItemTemplate const* proto = item->GetTemplate();
+        if (!proto || !proto->SellPrice || item->IsInTrade())
+            return false;
+
+        if (proto->Quality == ITEM_QUALITY_POOR)
+            return true;
+
+        if ((proto->Class != ITEM_CLASS_ARMOR && proto->Class != ITEM_CLASS_WEAPON) ||
+            proto->Quality > ITEM_QUALITY_UNCOMMON)
+            return false;
+
+        if (player->CanUseItem(proto) != EQUIP_ERR_OK)
+            return true;
+
+        uint8 slot = player->FindEquipSlot(proto, NULL_SLOT, true);
+        if (slot == NULL_SLOT)
+            return true;
+
+        Item* equipped = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot);
+        return equipped && equipped->GetTemplate()->ItemLevel >= proto->ItemLevel;
+    }
+
+    // .dash sell <player> -- sell vendor trash from the bags, as if visiting a vendor
+    static bool HandleSell(ChatHandler* handler, char const* args)
+    {
+        std::vector<std::string> a = SplitArgs(args);
+        if (a.size() != 1)
+        {
+            handler->SendErrorMessage("Usage: .dash sell <player>");
+            return false;
+        }
+
+        Player* player = FindOnline(handler, a[0]);
+        if (!player)
+            return false;
+
+        if (player->IsInCombat())
+        {
+            handler->SendErrorMessage("{} is in combat.", player->GetName());
+            return false;
+        }
+
+        std::vector<std::pair<uint8, uint8>> toSell;
+        for (uint8 slot = INVENTORY_SLOT_ITEM_START; slot < INVENTORY_SLOT_ITEM_END; ++slot)
+        {
+            if (Item* item = player->GetItemByPos(INVENTORY_SLOT_BAG_0, slot); item && IsVendorTrash(player, item))
+                toSell.emplace_back(INVENTORY_SLOT_BAG_0, slot);
+        }
+
+        for (uint8 bagSlot = INVENTORY_SLOT_BAG_START; bagSlot < INVENTORY_SLOT_BAG_END; ++bagSlot)
+        {
+            Item* bagItem = player->GetItemByPos(INVENTORY_SLOT_BAG_0, bagSlot);
+            Bag* bag = bagItem ? bagItem->ToBag() : nullptr;
+            if (!bag)
+                continue;
+
+            for (uint32 slot = 0; slot < bag->GetBagSize(); ++slot)
+            {
+                if (Item* item = bag->GetItemByPos(slot); item && IsVendorTrash(player, item))
+                    toSell.emplace_back(bagSlot, slot);
+            }
+        }
+
+        uint32 copper = 0;
+        for (auto const& [bag, slot] : toSell)
+        {
+            Item* item = player->GetItemByPos(bag, slot);
+            copper += item->GetTemplate()->SellPrice * item->GetCount();
+            player->DestroyItem(bag, slot, true);
+        }
+
+        if (copper)
+            player->ModifyMoney(static_cast<int32>(copper));
+
+        handler->PSendSysMessage("{} sold {} item(s) for {}g {}s {}c and has {} free bag slots.", player->GetName(),
+                                 toSell.size(), copper / 10000, (copper / 100) % 100, copper % 100,
+                                 player->GetFreeInventorySpace());
+        return true;
+    }
+
     static bool HandleAddMoney(ChatHandler* handler, char const* args)
     {
         std::vector<std::string> a = SplitArgs(args);
