@@ -495,6 +495,9 @@ async function loadAgents() {
   agents = d.agents;
   $('#agToggle').textContent = d.enabled ? 'Pause all agents' : 'Let agents think';
   $('#agToggle').dataset.on = d.enabled ? '1' : '0';
+  $('#agInfo').textContent = !d.enabled ? 'Agents are paused by you.'
+    : d.awake ? 'Agents are living: each makes a life decision every 2-3 minutes while playerbots plays them.'
+    : 'Agents are resting: they only think while a real player is online.';
   $('#agCards').innerHTML = agents.map(a => {
     const st = a.state || {}, xp = st.xpnext ? Math.round(st.xp / st.xpnext * 100) : 0;
     const status = !st.online ? '<span class="dot"></span>offline' : !st.alive ? '<span class="dot bad"></span>dead'

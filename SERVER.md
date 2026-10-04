@@ -29,7 +29,9 @@ cp docker-compose.override.example.yml docker-compose.override.yml
 docker compose build && docker compose up -d
 ```
 
-Then create the dashboard's SOAP account (GM level 3) with the names from `.env`:
+`docker compose up` runs db-import first, which creates the agent tables. The dashboard
+container (`ac-manager`) is defined in the override file; set `MANAGER_BIND` to a private
+or VPN address. Then create the dashboard's SOAP account (GM level 3) with the names from `.env`:
 
 ```
 ./acmd.sh "account create ACMANAGER <SOAP_PASS>"
@@ -65,8 +67,28 @@ Agents tab: persona, level chart, life story (thoughts, conversations, quests, l
 travel, deaths, parties, gear, gold) and memories. From there you can pause an agent, make it
 think now, nudge it with a suggestion, or start a new life.
 
+Agents only think while at least one real player is online, so an empty server makes no LLM
+calls. The Agents tab says whether they are living or resting.
+
 Agents are listed in `characters.dash_agents`. The module stops the random bot manager from
 re-rolling, logging out or teleporting them, and `.dash reroll` re-rolls every bot except agents.
+The tables are created by the module's SQL (`modules/mod-dashboard-tools/data/sql`) during
+db-import, and by the dashboard on startup if they are missing.
+
+To choose agents, pick random-bot characters (not death knights) and register them, then
+exclude them from the level-bracket module and restart:
+
+```sql
+INSERT INTO acore_characters.dash_agents (guid, name)
+SELECT guid, name FROM acore_characters.characters WHERE name IN ('Aliannah', 'Manel');
+```
+
+```
+BotLevelBrackets.ExcludeNames = Aliannah,Manel        # env/dist/etc/modules/mod_player_bot_level_brackets.conf
+```
+
+On their first thought, agents are reset to level 1 at their race's starting area and the LLM
+writes their persona.
 
 ## Local patches
 

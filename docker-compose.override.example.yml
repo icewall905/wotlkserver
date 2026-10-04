@@ -79,6 +79,7 @@ services:
       - ./backups:/backups
       - ./env/dist/etc:/etc-ac:ro
       - ./docker-data/client-data/dbc:/dbc:ro
+      - ./modules/mod-dashboard-tools/data/sql/db-characters/base/2026_10_04_00_dash_agents.sql:/app/sql/dash_agents.sql:ro
     depends_on:
       ac-database:
         condition: service_healthy

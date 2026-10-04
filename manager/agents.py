@@ -88,6 +88,7 @@ class AgentRunner:
         self.lock = threading.Lock()
         self.zone_ids = {}
         self.last_chat = {}
+        self.world_awake = None
 
     # ------------------------------------------------------------------ helpers
 
@@ -442,7 +443,15 @@ class AgentRunner:
         while True:
             try:
                 self.resolve_zones()
-                if self.enabled():
+                # Agents only live while someone is around to share the world with: no real player
+                # online means no LLM calls. The idle manager stops the server later anyway.
+                anyone = bool(self.real_players()) if self.enabled() else False
+                if self.enabled() and anyone != self.world_awake:
+                    self.world_awake = anyone
+                    for a in self.query("SELECT guid, name FROM acore_characters.dash_agents WHERE active = 1"):
+                        self.event(a["guid"], "status", f"{a['name']} wakes up: someone is in the world." if anyone
+                                   else f"{a['name']} rests: no players online, thinking paused.")
+                if self.enabled() and anyone:
                     agents = self.query("SELECT * FROM acore_characters.dash_agents WHERE active = 1 ORDER BY guid")
                     now = time.monotonic()
                     for i, agent in enumerate(agents):
@@ -464,5 +473,21 @@ class AgentRunner:
                 self.app.logger.warning("agent loop: %s", e)
             time.sleep(10)
 
+    def ensure_tables(self):
+        """Create the agent tables if db-import has not (same SQL as the module ships)."""
+        path = "/app/sql/dash_agents.sql"
+        try:
+            sql = open(path, encoding="utf-8").read()
+        except OSError:
+            return
+        sql = "\n".join(line for line in sql.splitlines() if not line.strip().startswith("--"))
+        for stmt in [x.strip() for x in sql.split(";") if x.strip()]:
+            self.execute(stmt.replace("CREATE TABLE IF NOT EXISTS `", "CREATE TABLE IF NOT EXISTS acore_characters.`")
+                         .replace("INSERT IGNORE INTO `", "INSERT IGNORE INTO acore_characters.`"))
+
     def start(self):
+        try:
+            self.ensure_tables()
+        except Exception as e:
+            self.app.logger.warning("agent tables: %s", e)
         threading.Thread(target=self.loop, daemon=True).start()

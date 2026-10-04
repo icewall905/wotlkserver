@@ -1311,7 +1311,7 @@ def api_agents():
         st = agent_runner.states.get(r["guid"]) or {}
         out.append({**{k: _iso(v) for k, v in r.items() if k != "persona"}, "persona": persona, "state": st,
                     "level_history": history.get(r["guid"], [])})
-    return jsonify(enabled=agent_runner.enabled(), agents=out)
+    return jsonify(enabled=agent_runner.enabled(), awake=bool(agent_runner.world_awake), agents=out)
 
 
 @app.get("/api/agents/feed")
