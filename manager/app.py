@@ -663,6 +663,9 @@ def api_characters():
 def api_altbot():
     d = request.get_json(force=True)
     master, alt, action = d.get("master", ""), d.get("alt", ""), d.get("action", "")
+    if action == "regroup" and valid_char(master):
+        ok, out = soap(f"dash altbot regroup {master}")
+        return jsonify(ok=ok, output=out)
     if not valid_char(master) or not valid_char(alt) or action not in ("add", "remove", "invite"):
         return jsonify(ok=False, output="Bad request"), 400
     if action != "add":

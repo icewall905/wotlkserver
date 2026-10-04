@@ -240,6 +240,7 @@ a { color: var(--accent); }
         <p class="muted" style="margin-top:0">Logs an alt from the same account in as a bot that joins your party. The selected character must be online. <b>Ready up</b> levels the alt to you, learns its spells and gears it, without touching talents or action bars.
           While an alt is in your party it follows you, so its saved location moves with you.</p>
         <div class="row" style="margin-bottom:8px"><button class="btn" id="summonAll">Summon all my bots to me</button>
+          <button class="btn" id="regroup" title="Turns a raid back into a normal party: you plus up to 4 of your own bots">Make it a normal party</button>
           <button class="btn primary" id="fullMaint" title="Level to you, learn spells, maintenance (talents, glyphs, bags, consumables), autogear up to legendary, sell junk">Full maintenance for all my bots</button></div>
         <div class="tablewrap"><table id="altTable"><tbody></tbody></table></div></div>
       <div class="card"><h3>Give gold</h3>
@@ -807,6 +808,8 @@ async function summon(target, btn) {
   await act(btn, () => api('/api/summon', {method: 'POST', body: {master: ch(), target}}));
 }
 $('#summonAll').onclick = e => summon('all', e.target);
+$('#regroup').onclick = e => confirm('Re-form your group as a normal party: you plus up to 4 of your own bots. Anyone else is removed. Continue?')
+  && act(e.target, () => api('/api/altbot', {method: 'POST', body: {master: ch(), action: 'regroup'}})).then(loadCharacters);
 $('#fullMaint').onclick = async e => {
   if (!confirm(`Full maintenance for every bot with ${ch()}: level them to you, learn spells, maintenance, autogear and sell junk.\n\n`
                + `Maintenance RESETS and re-picks their talents. Only for bot companions nobody plays by hand. Continue?`)) return;

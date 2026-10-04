@@ -89,9 +89,10 @@ public:
     static bool HandleAltBot(ChatHandler* handler, char const* args)
     {
         std::vector<std::string> a = SplitArgs(args);
-        if (a.size() != 3 || (a[0] != "add" && a[0] != "remove" && a[0] != "invite"))
+        if ((a.size() != 3 && !(a.size() == 2 && a[0] == "regroup")) ||
+            (a[0] != "add" && a[0] != "remove" && a[0] != "invite" && a[0] != "regroup"))
         {
-            handler->SendErrorMessage("Usage: .dash altbot add|remove|invite <master> <alt>");
+            handler->SendErrorMessage("Usage: .dash altbot add|remove|invite <master> <alt> | regroup <master>");
             return false;
         }
 
@@ -101,6 +102,20 @@ public:
 
         if (a[0] == "invite")
             return InviteAltBot(handler, master, a[2]);
+
+        if (a[0] == "regroup")
+            return Regroup(handler, master);
+
+        // A bot joining a full party makes playerbots convert it to a raid; refuse instead.
+        if (a[0] == "add")
+        {
+            Group* group = master->GetGroup();
+            if (group && !group->isRaidGroup() && group->IsFull())
+            {
+                handler->SendErrorMessage("{}'s party is full (5/5). Send someone home first.", master->GetName());
+                return false;
+            }
+        }
 
         PlayerbotMgr* mgr = GET_PLAYERBOT_MGR(master);
         if (!mgr)
@@ -113,6 +128,49 @@ public:
         for (std::string const& line : mgr->HandlePlayerbotCommand(cmd.c_str(), master))
             handler->PSendSysMessage("{}", line);
 
+        return true;
+    }
+
+    // Replace the master's group (typically a raid it was converted into) with a normal party:
+    // the master as leader plus up to four of their own bots. Other members are dropped.
+    static bool Regroup(ChatHandler* handler, Player* master)
+    {
+        std::vector<ObjectGuid> keep;
+        if (PlayerbotMgr* mgr = GET_PLAYERBOT_MGR(master))
+        {
+            for (auto it = mgr->GetPlayerBotsBegin(); it != mgr->GetPlayerBotsEnd() && keep.size() < 4; ++it)
+            {
+                if (it->second)
+                    keep.push_back(it->second->GetGUID());
+            }
+        }
+
+        if (Group* old = master->GetGroup())
+            old->Disband();
+
+        if (keep.empty())
+        {
+            handler->PSendSysMessage("{} has no bots logged in; the old group was disbanded.", master->GetName());
+            return true;
+        }
+
+        Group* group = new Group;
+        if (!group->Create(master))
+        {
+            delete group;
+            handler->SendErrorMessage("Could not create a party for {}.", master->GetName());
+            return false;
+        }
+        sGroupMgr->AddGroup(group);
+
+        std::string names;
+        for (ObjectGuid const& guid : keep)
+        {
+            Player* bot = ObjectAccessor::FindPlayer(guid);
+            if (bot && !bot->GetGroup() && group->AddMember(bot))
+                names += (names.empty() ? "" : ", ") + bot->GetName();
+        }
+        handler->PSendSysMessage("{} now leads a normal party with {}.", master->GetName(), names.empty() ? "nobody" : names);
         return true;
     }
 
@@ -155,12 +213,9 @@ public:
 
             if (group->IsFull())
             {
-                if (group->isRaidGroup())
-                {
-                    handler->SendErrorMessage("{}'s raid is full.", master->GetName());
-                    return false;
-                }
-                group->ConvertToRaid();
+                handler->SendErrorMessage("{}'s {} is full. Send someone home first.", master->GetName(),
+                                          group->isRaidGroup() ? "raid" : "party (5/5)");
+                return false;
             }
 
             if (!group->AddMember(alt))
