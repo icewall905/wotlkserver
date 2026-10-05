@@ -1455,6 +1455,220 @@ def api_agent_sheet(guid):
                    born=_iso(first[0]["t"] if first and first[0]["t"] else (born[0]["born_at"] if born else None)))
 
 
+def load_dbc(name):
+    """All records of a client DBC file as tuples of uint32, plus a string-block reader."""
+    try:
+        with open(f"/dbc/{name}.dbc", "rb") as f:
+            data = f.read()
+        _, count, fields, rec_size, _ = struct.unpack("<4s4I", data[:20])
+        strings = data[20 + count * rec_size:]
+        rows = [struct.unpack_from(f"<{fields}I", data, 20 + i * rec_size) for i in range(count)]
+        return rows, lambda o: strings[o:strings.index(b"\0", o)].decode("utf-8", "replace")
+    except (OSError, struct.error, ValueError):
+        return [], lambda o: ""
+
+
+def _signed(v):
+    return v - (1 << 32) if v >= 1 << 31 else v
+
+
+def load_sheet_dbcs():
+    icons_rows, s = load_dbc("SpellIcon")
+    icons = {r[0]: s(r[1]).rsplit("\\", 1)[-1].lower() for r in icons_rows}
+    rows, s = load_dbc("SkillLine")
+    skills = {r[0]: {"name": s(r[3]), "cat": r[1], "icon": icons.get(r[37])} for r in rows}
+    rows, s = load_dbc("TalentTab")
+    tabs = {r[0]: {"name": s(r[1]), "class_mask": r[20], "order": r[22], "bg": s(r[23])} for r in rows}
+    rows, _ = load_dbc("Talent")
+    talents = {}
+    for r in rows:
+        for rank, spell in enumerate(r[4:13]):
+            if spell:
+                talents[spell] = (r[1], rank + 1)
+    rows, s = load_dbc("Achievement")
+    achievements = {r[0]: {"name": s(r[4]), "points": r[39], "icon": icons.get(r[42])} for r in rows}
+    rows, s = load_dbc("Faction")
+    factions = {r[0]: {"name": s(r[23]), "races": r[2:6], "classes": r[6:10], "base": [_signed(v) for v in r[10:14]]}
+                for r in rows if _signed(r[1]) >= 0}
+    return skills, tabs, talents, achievements, factions
+
+
+SKILLS, TALENT_TABS, TALENTS, ACHIEVEMENTS, FACTIONS = load_sheet_dbcs()
+REP_RANKS = [(42000, "Exalted"), (21000, "Revered"), (9000, "Honored"), (3000, "Friendly"), (0, "Neutral"),
+             (-3000, "Unfriendly"), (-6000, "Hostile"), (-42000, "Hated")]
+REP_SPAN = {"Exalted": 1000, "Revered": 21000, "Honored": 12000, "Friendly": 6000, "Neutral": 3000,
+            "Unfriendly": 3000, "Hostile": 3000, "Hated": 36000}
+
+
+def rep_rank(total):
+    for floor, name in REP_RANKS:
+        if total >= floor:
+            return name, total - floor, REP_SPAN[name]
+    return "Hated", 0, REP_SPAN["Hated"]
+
+
+def item_row(g):
+    return {"entry": g["entry"], "name": g["name"], "quality": g["Quality"], "ilvl": g["ItemLevel"],
+            "count": g.get("count", 1),
+            "icon": ICON_URL.format(size="medium", name=ITEM_ICONS.get(g["displayid"], "inv_misc_questionmark"))}
+
+
+@app.get("/api/character/search")
+@requires_auth
+def api_character_search():
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify([])
+    rows = query("SELECT c.name, c.level, c.class, a.username LIKE 'RNDBOT%%' AS bot FROM acore_characters.characters c "
+                 "JOIN acore_auth.account a ON a.id = c.account WHERE c.name LIKE %s ORDER BY bot, c.name LIMIT 25",
+                 (q.replace("%", "").replace("_", "") + "%",))
+    return jsonify([{**r, "class": CLASSES.get(r["class"], "?"), "bot": bool(r["bot"])} for r in rows])
+
+
+@app.get("/api/character/<name>/view")
+@requires_auth
+def api_character_view(name):
+    """Everything about one character, for anyone on the server (players, alts, random bots, agents)."""
+    rows = query("SELECT c.*, a.username FROM acore_characters.characters c "
+                 "JOIN acore_auth.account a ON a.id = c.account WHERE c.name = %s", (name,))
+    if not rows:
+        return jsonify(error="No such character"), 404
+    c = rows[0]
+    guid, race, cls = c["guid"], c["race"], c["class"]
+    is_rndbot = c["username"].upper().startswith("RNDBOT")
+    agent = query("SELECT guid FROM acore_characters.dash_agents WHERE guid = %s", (guid,))
+    live = live_online_names()
+    online = bool(c["online"]) if live is None or is_rndbot else name in live
+    st = agent_runner.read_state(name) if online else None
+    if not st or not st.get("online"):
+        st = None
+
+    inv = query(
+        "SELECT ci.bag, ci.slot, ci.item, ii.count, it.entry, it.name, it.Quality, it.ItemLevel, it.displayid, "
+        "it.class AS iclass FROM acore_characters.character_inventory ci "
+        "JOIN acore_characters.item_instance ii ON ii.guid = ci.item "
+        "JOIN acore_world.item_template it ON it.entry = ii.itemEntry WHERE ci.guid = %s ORDER BY ci.bag, ci.slot",
+        (guid,))
+    equip_bags = {r["item"] for r in inv if r["bag"] == 0 and 19 <= r["slot"] <= 22}
+    bank_bags = {r["item"] for r in inv if r["bag"] == 0 and 67 <= r["slot"] <= 73}
+    equipment, bags, bank, keys = [], [], [], []
+    for r in inv:
+        it = item_row(r)
+        if r["bag"] == 0 and r["slot"] < 19:
+            equipment.append({**it, "slot": EQUIP_SLOTS[r["slot"]], "slot_id": r["slot"]})
+        elif (r["bag"] == 0 and 19 <= r["slot"] <= 38) or r["bag"] in equip_bags:
+            bags.append(it)
+        elif (r["bag"] == 0 and 39 <= r["slot"] <= 73) or r["bag"] in bank_bags:
+            bank.append(it)
+        elif r["bag"] == 0 and 86 <= r["slot"] <= 117:
+            keys.append(it)
+
+    skills = []
+    for s in query("SELECT skill, value, max FROM acore_characters.character_skills WHERE guid = %s", (guid,)):
+        info = SKILLS.get(s["skill"])
+        if info and info["cat"] in (6, 8, 9, 11) and "Racial" not in info["name"]:  # weapons, armor, secondary, professions
+            skills.append({"name": info["name"], "value": s["value"], "max": s["max"], "cat": info["cat"],
+                           "icon": ICON_URL.format(size="medium", name=info["icon"] or "inv_misc_questionmark")})
+    skills.sort(key=lambda s: ({11: 0, 9: 1, 6: 2, 8: 3}[s["cat"]], -s["value"]))
+
+    spec = 1 << (c["activeTalentGroup"] or 0)
+    points = {}
+    for t in query("SELECT spell, specMask FROM acore_characters.character_talent WHERE guid = %s", (guid,)):
+        if t["specMask"] & spec and t["spell"] in TALENTS:
+            tab, rank = TALENTS[t["spell"]]
+            points[tab] = points.get(tab, 0) + rank
+    trees = sorted(((tid, tab) for tid, tab in TALENT_TABS.items() if tab["class_mask"] & (1 << (cls - 1))),
+                   key=lambda x: x[1]["order"])
+    talents = [{"name": tab["name"], "points": points.get(tid, 0)} for tid, tab in trees]
+
+    quests = []
+    for q in query("SELECT qs.quest, qs.status, qt.LogTitle, qt.QuestLevel FROM acore_characters.character_queststatus qs "
+                   "LEFT JOIN acore_world.quest_template qt ON qt.ID = qs.quest WHERE qs.guid = %s AND qs.status IN (1, 3, 5) "
+                   "ORDER BY qt.QuestLevel", (guid,)):
+        quests.append({"id": q["quest"], "title": q["LogTitle"] or f"Quest {q['quest']}", "level": q["QuestLevel"],
+                       "status": {1: "complete", 3: "in progress", 5: "failed"}[q["status"]]})
+    done = query("SELECT COUNT(*) AS n FROM acore_characters.character_queststatus_rewarded WHERE guid = %s", (guid,))
+
+    ach = query("SELECT achievement, date FROM acore_characters.character_achievement WHERE guid = %s "
+                "ORDER BY date DESC", (guid,))
+    recent = []
+    for a in ach[:12]:
+        info = ACHIEVEMENTS.get(a["achievement"])
+        if info:
+            recent.append({"id": a["achievement"], "name": info["name"], "points": info["points"],
+                           "date": datetime.datetime.fromtimestamp(a["date"]).strftime("%Y-%m-%d"),
+                           "icon": ICON_URL.format(size="medium", name=info["icon"] or "inv_misc_questionmark")})
+    ach_points = sum(ACHIEVEMENTS.get(a["achievement"], {}).get("points", 0) for a in ach)
+
+    reps = []
+    for r in query("SELECT faction, standing, flags FROM acore_characters.character_reputation WHERE guid = %s "
+                   "AND (flags & 1) AND NOT (flags & 8)", (guid,)):
+        f = FACTIONS.get(r["faction"])
+        if not f:
+            continue
+        base = 0
+        for i in range(4):
+            races, classes = f["races"][i], f["classes"][i]
+            if (not races or races & (1 << (race - 1))) and (not classes or classes & (1 << (cls - 1))) \
+                    and (races or classes):
+                base = f["base"][i]
+                break
+        total = base + r["standing"]
+        rank, cur, span = rep_rank(total)
+        reps.append({"name": f["name"], "rank": rank, "value": cur, "max": span, "total": total})
+    reps.sort(key=lambda r: -r["total"])
+
+    guild = query("SELECT g.name, gr.rname FROM acore_characters.guild_member gm "
+                  "JOIN acore_characters.guild g ON g.guildid = gm.guildid "
+                  "LEFT JOIN acore_characters.guild_rank gr ON gr.guildid = gm.guildid AND gr.rid = gm.rank "
+                  "WHERE gm.guid = %s", (guid,))
+    talks = query(
+        "SELECT h.timestamp AS ts, pc.name AS player, bc.name AS bot, h.player_message, h.bot_reply "
+        "FROM acore_characters.mod_ollama_chat_history h "
+        "LEFT JOIN acore_characters.characters pc ON pc.guid = h.player_guid "
+        "LEFT JOIN acore_characters.characters bc ON bc.guid = h.bot_guid "
+        "WHERE h.bot_guid = %s OR h.player_guid = %s ORDER BY h.id DESC LIMIT 20", (guid, guid))
+
+    zone_id = st["zone_id"] if st else c["zone"]
+    x, y = (st["x"], st["y"]) if st else (c["position_x"], c["position_y"])
+    pos = map_point(zone_id, x, y)
+    level = st["level"] if st else c["level"]
+    info = {
+        "guid": guid, "name": c["name"], "account": c["username"], "online": online, "live": bool(st),
+        "kind": "agent" if agent else "random bot" if is_rndbot else "character",
+        "level": level, "race": RACES.get(race, "?"), "class": CLASSES.get(cls, "?"),
+        "gender": "female" if c["gender"] else "male",
+        "faction": "Alliance" if race in (1, 3, 4, 7, 11) else "Horde",
+        "zone": zone_name(zone_id), "area": st.get("area_name") if st else None, "map": map_name(st["map"] if st else c["map"]),
+        "gold": st["gold"] if st else c["money"] // 10000, "money": c["money"],
+        "played_h": round((st["played_s"] if st else c["totaltime"]) / 3600, 1),
+        "level_played_h": round(c["leveltime"] / 3600, 1),
+        "xp": st["xp"] if st else c["xp"], "xpnext": st["xpnext"] if st else None,
+        "hp": st["hp"] if st else None, "alive": st["alive"] if st else None, "ilvl": st["ilvl"] if st else None,
+        "group": st["group"] if st else [], "kills": c["totalKills"], "honor": c["totalHonorPoints"],
+        "arena": c["arenaPoints"], "created": _iso(c["creation_date"]),
+        "last_logout": _iso(datetime.datetime.fromtimestamp(c["logout_time"])) if c["logout_time"] else None,
+        "guild": guild[0]["name"] if guild else None, "guild_rank": guild[0]["rname"] if guild else None,
+        "quests_done": done[0]["n"] if done else 0, "achievements": len(ach), "achievement_points": ach_points,
+    }
+    if not info["ilvl"]:
+        lv = [e["ilvl"] for e in equipment if e["slot_id"] not in (3, 18)]
+        info["ilvl"] = round(sum(lv) / len(lv)) if lv else None
+    visual = {
+        "color": CLASS_COLORS.get(cls, "#888"),
+        "class_icon": ICON_URL.format(size="medium", name=f"classicon_{CLASS_ICON.get(cls, 'warrior')}"),
+        "portrait": ICON_URL.format(size="large", name=f"race_{RACE_ICON.get(race, 'human')}_{info['gender']}"),
+    }
+    mp = {"zone": zone_id, "name": zone_name(zone_id), "pos": pos, "trail": [], "live": bool(st),
+          "url": f"https://wow.zamimg.com/images/wow/wrath/maps/enus/original/{zone_id}.jpg",
+          "fallback": f"https://wow.zamimg.com/images/wow/maps/enus/original/{zone_id}.jpg"} if pos else None
+    return jsonify(info=info, visual=visual, map=mp, equipment=equipment, bags=bags, bank=bank, keys=keys,
+                   skills=skills, talents=talents, quests=quests, live_quests=st["quests"] if st else None,
+                   achievements=recent, reputations=reps[:30],
+                   talks=[{**t, "ts": _iso(t["ts"])} for t in talks])
+
+
+
 @app.get("/api/agents/feed")
 @requires_auth
 def api_agents_feed():

@@ -120,6 +120,22 @@ table.kv td { white-space: normal; padding: 5px 8px; }
 td.wrap { white-space: normal; }
 a { color: var(--accent); }
 .tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--code); color: var(--muted); }
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50; overflow-y: auto; padding: 24px 16px; display: none; }
+.modal.open { display: block; }
+.modal .inner { max-width: 1400px; margin: 0 auto; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.modal .agdetail { margin-bottom: 0; }
+.cvtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.bagsgrid { display: grid; grid-template-columns: repeat(auto-fill, 36px); gap: 4px; }
+.bagsgrid a { position: relative; display: block; width: 36px; height: 36px; }
+.bagsgrid img { width: 36px; height: 36px; border-radius: 4px; border: 2px solid var(--qc, #555); }
+.bagsgrid span { position: absolute; right: 2px; bottom: 0; font-size: 11px; font-weight: 600; color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000; }
+.skillrow { display: grid; grid-template-columns: 22px 1fr 70px; gap: 6px; align-items: center; font-size: 12px; padding: 2px 0; }
+.skillrow img { width: 20px; height: 20px; border-radius: 3px; }
+.skillrow .bar2 { margin-top: 0; }
+.trees { display: flex; gap: 6px; }
+.trees .stat { flex: 1; }
+a.cl { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--muted); cursor: pointer; }
+a.cl:hover { color: var(--accent); }
 #toast { position: fixed; bottom: 16px; right: 16px; left: 16px; max-width: 480px; margin-left: auto; background: var(--panel);
          border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; display: none; white-space: pre-wrap; }
 #toast.bad { border-color: var(--bad); }
@@ -233,6 +249,7 @@ a { color: var(--accent); }
   <section id="characters">
     <div class="card"><div class="row">
       <label>Character <select id="charSel"></select></label>
+      <button class="btn" onclick="viewChar($('#charSel').value)">View character</button>
       <button class="btn" onclick="loadCharacters()">Refresh</button>
       <span class="muted" id="charInfo"></span></div></div>
     <div class="split">
@@ -331,7 +348,9 @@ a { color: var(--accent); }
 
   <section id="players">
     <div class="card"><div class="row" style="margin-bottom:8px"><label><input type="checkbox" id="showBots"> include random bots</label>
-      <button class="btn" onclick="loadPlayers()">Refresh</button></div>
+      <button class="btn" onclick="loadPlayers()">Refresh</button>
+      <input id="lookupQ" list="lookupList" placeholder="look up any character, online or not" autocomplete="off" style="min-width:260px">
+      <datalist id="lookupList"></datalist><button class="btn primary" onclick="viewChar($('#lookupQ').value.trim())">View</button></div>
       <div class="tablewrap"><table id="playerTable"><thead><tr><th>Name</th><th>Level</th><th>Race</th><th>Class</th><th>Zone</th><th>Account</th><th></th></tr></thead><tbody></tbody></table></div></div>
   </section>
 
@@ -374,6 +393,31 @@ a { color: var(--accent); }
   </section>
 </main>
 <div id="toast"></div>
+<div class="modal" id="cv" onclick="if (event.target === this) closeChar()"><div class="inner">
+  <div class="cvtop"><div class="sheethead" id="cvHead"></div>
+    <div class="row" style="gap:6px"><span class="muted" id="cvUpd" style="font-size:12px"></span><span id="cvExtra"></span>
+      <button class="btn" onclick="viewChar(cvName)">Refresh</button><button class="btn" onclick="closeChar()">Close</button></div></div>
+  <div id="cvBars"></div>
+  <div class="statgrid" id="cvStats" style="grid-template-columns:repeat(auto-fit,minmax(90px,1fr));margin-bottom:12px"></div>
+  <div class="agdetail">
+    <div class="card agcol">
+      <h3>Equipment</h3><div class="paperdoll" id="cvGear"></div>
+      <h3 style="margin-top:14px">Talents</h3><div class="trees" id="cvTalents"></div>
+      <h3 style="margin-top:14px">Professions &amp; skills</h3><div id="cvSkills"></div>
+    </div>
+    <div class="card agcol">
+      <h3 id="cvMapTitle">Map</h3><div class="mapbox" id="cvMap"></div>
+      <h3 style="margin-top:14px">Quest log</h3><div id="cvQuests" class="questlog"></div>
+      <h3 style="margin-top:14px">Reputation</h3><div id="cvReps"></div>
+    </div>
+    <div class="card agcol">
+      <h3 id="cvBagsTitle">Bags</h3><div class="bagsgrid" id="cvBags"></div>
+      <h3 style="margin-top:14px" id="cvBankTitle">Bank</h3><div class="bagsgrid" id="cvBank"></div>
+      <h3 style="margin-top:14px" id="cvAchTitle">Recent achievements</h3><div id="cvAch"></div>
+      <h3 style="margin-top:14px">Conversations</h3><div id="cvTalks" class="story" style="max-height:360px"></div>
+    </div>
+  </div>
+</div></div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -434,9 +478,9 @@ async function loadStatus() {
   $('#kErr').textContent = d.errors?.count ?? '–';
   $('#kErrSub').textContent = d.errors?.note || 'since startup finished';
 
-  $('#ovPlayers tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${esc(p.name)}</td><td>${p.level} ${esc(p.class)}</td>
+  $('#ovPlayers tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${cl(p.name)}</td><td>${p.level} ${esc(p.class)}</td>
     <td>${esc(p.zone)}<div class="muted" style="font-size:12px">${esc(p.map)}</div></td><td>${p.latency} ms</td>
-    <td class="wrap">${p.bots.length ? p.bots.map(esc).join(', ') : '<span class="muted">none</span>'}</td></tr>`).join('')
+    <td class="wrap">${p.bots.length ? p.bots.map(cl).join(', ') : '<span class="muted">none</span>'}</td></tr>`).join('')
     : `<tr><td colspan="5" class="muted">${d.world_up ? 'Nobody online.' : 'World server is not running.'}</td></tr>`;
 
   $('#services tbody').innerHTML = d.services.map(sv => {
@@ -487,11 +531,15 @@ $('#announceBtn').onclick = e => { const m = $('#announceMsg').value.trim(); if 
 // players
 async function loadPlayers() {
   const rows = await api('/api/players' + ($('#showBots').checked ? '?bots=1' : ''));
-  $('#playerTable tbody').innerHTML = rows.length ? rows.map(p => `<tr><td>${esc(p.name)}</td><td>${p.level}</td><td>${esc(p.race)}</td>
+  $('#playerTable tbody').innerHTML = rows.length ? rows.map(p => `<tr><td>${cl(p.name)}</td><td>${p.level}</td><td>${esc(p.race)}</td>
     <td>${esc(p.class)}</td><td>${esc(p.zone)}</td><td class="muted">${esc(p.username)}</td><td>${p.is_bot ? '<span class="tag">bot</span>' : ''}</td></tr>`).join('')
     : '<tr><td colspan="7" class="muted">Nobody online.</td></tr>';
 }
 $('#showBots').onchange = loadPlayers;
+$('#lookupQ').oninput = async () => { const q = $('#lookupQ').value.trim(); if (q.length < 2) return;
+  const rows = await api('/api/character/search?q=' + encodeURIComponent(q));
+  if (Array.isArray(rows)) $('#lookupList').innerHTML = rows.map(r => `<option value="${esc(r.name)}">${r.level} ${esc(r.class)}${r.bot ? ' · bot' : ''}</option>`).join(''); };
+$('#lookupQ').onkeydown = e => { if (e.key === 'Enter') viewChar($('#lookupQ').value.trim()); };
 
 // accounts
 async function loadAccounts() {
@@ -658,7 +706,7 @@ async function renderAgent() {
   const p = a.persona || {}, st = a.state || {}, xp = st.xpnext ? Math.round(st.xp / st.xpnext * 100) : 0, s = a.stats || {};
   $('#agdHead').innerHTML = `${portrait(a)}<div><div class="title" style="color:${a.visual.color}">${esc(a.name)}</div>
     <div class="muted">Level ${st.level || '?'} ${esc(st.race || '')} ${esc(st.class || '')} · ${esc(st.faction || '')}</div>
-    <div class="muted" style="font-size:12px">${esc(st.online ? (st.area_name ? st.area_name + ', ' : '') + (st.zone_name || '') : 'not in the world')}${(st.group || []).length ? ' · with ' + esc(st.group.map(g => g.split(':')[0]).join(', ')) : ''}</div></div>`;
+    <div class="muted" style="font-size:12px">${esc(st.online ? (st.area_name ? st.area_name + ', ' : '') + (st.zone_name || '') : 'not in the world')}${(st.group || []).length ? ' · with ' + st.group.map(g => cl(g.split(':')[0])).join(', ') : ''}</div></div>`;
   $('#agdBars').innerHTML = `<div class="bar2" style="height:10px;margin-top:12px" title="Health"><div class="hp" style="width:${st.online ? st.hp : 0}%"></div></div>
     <div class="bar2" style="height:10px" title="Experience"><div class="xp" style="width:${xp}%"></div></div>
     <div class="muted" style="font-size:11px;margin-top:3px">Health ${st.hp ?? 0}% · XP ${st.xp ?? 0} / ${st.xpnext ?? 0} (${xp}%)</div>`;
@@ -691,16 +739,70 @@ async function renderAgent() {
   $('#agdJournal').innerHTML = jr.map(j => `<div class="jentry"><div class="day" style="position:static">${esc(fmtDay(j.ts))} · level ${j.level ?? '?'}</div><div class="journal-text">${esc(j.text)}</div></div>`).join('')
     || '<div class="muted">The first entry is written when they log off for the night.</div>';
   $('#agdMemories').innerHTML = mem.map(m => `<div class="ev2"><span class="tag" style="flex:none">${m.importance}/10</span><div class="body">${esc(m.text)}${m.about ? ` <span class="muted">(${esc(m.about)})</span>` : ''}<div class="meta">${esc(m.ts)}</div></div></div>`).join('') || '<div class="muted">No memories yet.</div>';
-  const bySlot = Object.fromEntries((sheet.equipment || []).map(g => [g.slot_id, g]));
-  const order = [0, 9, 1, 5, 2, 6, 14, 7, 4, 10, 3, 11, 18, 12, 8, 13, 15, 16, 17];
-  $('#agdGear').innerHTML = order.map(i => { const g = bySlot[i];
-    return g ? `<div class="slot" style="--qc:${QCOLOR[g.quality] || '#555'}"><img src="${g.icon}" alt=""><a href="https://www.wowhead.com/wotlk/item=${g.entry}" target="_blank" rel="noopener" class="q${g.quality}" title="${esc(g.name)} (item level ${g.ilvl})">${esc(g.name)}</a></div>`
-      : `<div class="slot empty"><img src="${ICO('inv_misc_questionmark')}" alt=""><span class="muted">${['Head','Neck','Shoulder','Shirt','Chest','Waist','Legs','Feet','Wrist','Hands','Finger','Finger','Trinket','Trinket','Back','Main hand','Off hand','Ranged','Tabard'][i]}</span></div>`; }).join('');
+  $('#agdGear').innerHTML = gearHtml(sheet.equipment);
   $('#agdJourney').innerHTML = (sheet.journey || []).map((j, i) => `${i ? '<span class="muted">→</span>' : ''}<span class="stop" title="first ${esc(j.first)}">${esc(j.zone)} <span class="muted">lvl ${j.level ?? '?'}</span></span>`).join(' ')
     || '<div class="muted">No travels yet.</div>';
-  $('#agdPeople').innerHTML = (sheet.people || []).slice(0, 12).map(pp => `<div class="person"><div><b>${esc(pp.name)}</b>${pp.note ? `<div class="muted" style="font-size:12px">${esc(pp.note)}</div>` : ''}</div>
+  $('#agdPeople').innerHTML = (sheet.people || []).slice(0, 12).map(pp => `<div class="person"><div><b>${cl(pp.name)}</b>${pp.note ? `<div class="muted" style="font-size:12px">${esc(pp.note)}</div>` : ''}</div>
     <div class="muted" style="white-space:nowrap">${pp.talks ? pp.talks + ' talks' : ''}${pp.talks && pp.memories ? ' · ' : ''}${pp.memories ? pp.memories + ' memories' : ''}</div></div>`).join('') || '<div class="muted">Nobody yet.</div>';
 }
+function gearHtml(equipment) {
+  const bySlot = Object.fromEntries((equipment || []).map(g => [g.slot_id, g]));
+  const order = [0, 9, 1, 5, 2, 6, 14, 7, 4, 10, 3, 11, 18, 12, 8, 13, 15, 16, 17];
+  return order.map(i => { const g = bySlot[i];
+    return g ? `<div class="slot" style="--qc:${QCOLOR[g.quality] || '#555'}"><img src="${g.icon}" alt=""><a href="https://www.wowhead.com/wotlk/item=${g.entry}" target="_blank" rel="noopener" class="q${g.quality}" title="${esc(g.name)} (item level ${g.ilvl})">${esc(g.name)}</a></div>`
+      : `<div class="slot empty"><img src="${ICO('inv_misc_questionmark')}" alt=""><span class="muted">${['Head','Neck','Shoulder','Shirt','Chest','Waist','Legs','Feet','Wrist','Hands','Finger','Finger','Trinket','Trinket','Back','Main hand','Off hand','Ranged','Tabard'][i]}</span></div>`; }).join('');
+}
+
+// character view (anyone on the server)
+let cvName = null, cvTimer = null;
+const cl = n => n ? `<a class="cl" onclick="viewChar('${esc(n)}')">${esc(n)}</a>` : '';
+const REPC = {Exalted: '#2ea0a0', Revered: '#2ea043', Honored: '#3fb950', Friendly: '#56d364', Neutral: '#d29922', Unfriendly: '#db6d28', Hostile: '#f85149', Hated: '#b62324'};
+const bagsHtml = items => items.length ? items.map(it => `<a href="https://www.wowhead.com/wotlk/item=${it.entry}" target="_blank" rel="noopener" style="--qc:${QCOLOR[it.quality] || '#555'}" title="${esc(it.name)}${it.count > 1 ? ' x' + it.count : ''} (item level ${it.ilvl})"><img src="${it.icon}" alt="">${it.count > 1 ? `<span>${it.count}</span>` : ''}</a>`).join('') : '<div class="muted">Empty.</div>';
+function closeChar() { $('#cv').classList.remove('open'); cvName = null; clearInterval(cvTimer); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && cvName) closeChar(); });
+async function viewChar(name) {
+  if (!name) return;
+  const first = cvName !== name;
+  cvName = name; $('#cv').classList.add('open');
+  if (first) { $('#cvHead').innerHTML = `<div class="title">${esc(name)}</div><span class="muted">Loading…</span>`; ['#cvBars', '#cvStats', '#cvGear', '#cvTalents', '#cvSkills', '#cvMap', '#cvQuests', '#cvReps', '#cvBags', '#cvBank', '#cvAch', '#cvTalks', '#cvExtra'].forEach(id => $(id).innerHTML = ''); }
+  const d = await api(`/api/character/${encodeURIComponent(name)}/view`);
+  if (cvName !== name) return;
+  if (d.error) { $('#cvHead').innerHTML = `<div class="title">${esc(name)}</div><span class="muted">${esc(d.error)}</span>`; return; }
+  const i = d.info, a = {visual: d.visual, map: d.map, state: {level: i.level, online: i.online}};
+  const where = i.online ? (i.area && i.area !== i.zone ? i.area + ', ' : '') + i.zone : `last seen in ${i.zone}${i.last_logout ? ' · ' + since(i.last_logout.replace(' ', 'T')) + ' ago' : ''}`;
+  $('#cvHead').innerHTML = `${portrait(a)}<div><div class="title" style="color:${d.visual.color}">${esc(i.name)} <span class="tag">${esc(i.kind)}</span></div>
+    <div class="muted">Level ${i.level} ${esc(i.race)} ${esc(i.class)} · ${esc(i.faction)}${i.guild ? ` · &lt;${esc(i.guild)}&gt; ${esc(i.guild_rank || '')}` : ''}</div>
+    <div class="muted" style="font-size:12px">${i.online ? '<span class="dot ok"></span>' : '<span class="dot bad"></span>'}${esc(where)} · account ${esc(i.account)}${i.group.length ? ' · party: ' + i.group.map(g => cl(g.split(':')[0])).join(', ') : ''}</div></div>`;
+  $('#cvExtra').innerHTML = i.kind === 'agent' ? `<button class="btn" onclick="closeChar();document.querySelector('nav button[data-tab=agents]').click();selectAgent(${i.guid})">Open life story</button>` : '';
+  const xp = i.xpnext ? Math.round(i.xp / i.xpnext * 100) : null;
+  $('#cvBars').innerHTML = i.live ? `<div class="bar2" style="height:10px" title="Health"><div class="hp" style="width:${i.hp}%"></div></div>
+    <div class="bar2" style="height:10px" title="Experience"><div class="xp" style="width:${xp ?? 0}%"></div></div>
+    <div class="muted" style="font-size:11px;margin:3px 0 8px">Health ${i.hp}%${i.alive === false ? ' (dead)' : ''} · XP ${i.xp} / ${i.xpnext} (${xp}%)</div>`
+    : `<div class="muted" style="font-size:12px;margin-bottom:8px">Offline: showing the last save.</div>`;
+  $('#cvStats').innerHTML = [['Gold', i.gold.toLocaleString()], ['Item lvl', i.ilvl ?? '–'], ['Played', i.played_h + 'h'], ['This level', i.level_played_h + 'h'],
+    ['Quests done', i.quests_done], ['Achievements', `${i.achievements} <span style="font-size:11px">(${i.achievement_points} pts)</span>`], ['Kills', i.kills], ['Honor', i.honor],
+    ['Created', (i.created || '–').slice(0, 10)]].map(([l, v]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
+  $('#cvGear').innerHTML = gearHtml(d.equipment);
+  $('#cvTalents').innerHTML = d.talents.map(t => `<div class="stat"><b>${t.points}</b><span>${esc(t.name)}</span></div>`).join('') || '<div class="muted">None.</div>';
+  $('#cvSkills').innerHTML = d.skills.map(s => `<div class="skillrow" title="${esc(s.name)}"><img src="${s.icon}" alt=""><div><div>${esc(s.name)}</div>
+    <div class="bar2"><div style="width:${s.max ? s.value / s.max * 100 : 0}%;background:${s.cat === 11 ? '#2ea043' : s.cat === 9 ? '#1f6feb' : '#8b949e'}"></div></div></div><div class="muted" style="text-align:right">${s.value} / ${s.max}</div></div>`).join('') || '<div class="muted">None.</div>';
+  $('#cvMapTitle').textContent = d.map ? `Map: ${d.map.name}${d.map.live ? '' : ' (last save)'}` : 'Map';
+  $('#cvMap').innerHTML = mapHtml(a, true);
+  const ql = d.live_quests || d.quests.map(q => `${q.title} [${q.status === 'complete' ? 'done' : 'open'}]`);
+  $('#cvQuests').innerHTML = [...new Set(ql)].map(q => `<div>${esc(q.replace(/ \[(done|open)\]$/, ''))} ${q.endsWith('[done]') ? '<span class="tag" style="color:var(--ok)">ready to turn in</span>' : ''}</div>`).join('') || '<div class="muted">Empty quest log.</div>';
+  $('#cvReps').innerHTML = d.reputations.map(r => `<div class="skillrow" style="grid-template-columns:1fr 120px"><div><div>${esc(r.name)} <span class="muted">${r.rank}</span></div>
+    <div class="bar2"><div style="width:${r.value / r.max * 100}%;background:${REPC[r.rank]}"></div></div></div><div class="muted" style="text-align:right">${r.value.toLocaleString()} / ${r.max.toLocaleString()}</div></div>`).join('') || '<div class="muted">None.</div>';
+  $('#cvBagsTitle').textContent = `Bags (${d.bags.length} items)`; $('#cvBags').innerHTML = bagsHtml(d.bags);
+  $('#cvBankTitle').textContent = `Bank (${d.bank.length} items)`; $('#cvBank').innerHTML = bagsHtml(d.bank);
+  $('#cvAchTitle').textContent = `Recent achievements (${i.achievements})`;
+  $('#cvAch').innerHTML = d.achievements.map(x => `<div class="ev2"><img class="ic" src="${x.icon}" alt=""><div class="body">${esc(x.name)} <span class="muted">${x.points} pts</span><div class="meta">${esc(x.date)}</div></div></div>`).join('') || '<div class="muted">None yet.</div>';
+  $('#cvTalks').innerHTML = d.talks.map(t => `<div class="ev2"><div class="body"><div><b>${cl(t.player) || 'someone'}</b> <span class="bubble">${esc(t.player_message)}</span></div>
+    <div style="margin-top:3px">↳ <b>${cl(t.bot) || 'bot'}</b> <span class="bubble">${esc(t.bot_reply)}</span></div><div class="meta">${esc(t.ts || '')}</div></div></div>`).join('') || '<div class="muted">No LLM chats.</div>';
+  $('#cvUpd').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  clearInterval(cvTimer);
+  if (i.live) cvTimer = setInterval(() => cvName && viewChar(cvName), 20000);
+}
+
 function renderLeader() {
   const rows = [...agents].sort((x, y) => (y.state?.level || 0) - (x.state?.level || 0) || (y.state?.xp || 0) - (x.state?.xp || 0));
   $('#agLeader tbody').innerHTML = rows.map((a, i) => { const st = a.state || {}, s = a.stats || {};
@@ -732,7 +834,7 @@ async function loadActivity() {
   $('#actOnline').innerHTML = d.online.length ? d.online.map(a => `<div style="margin-bottom:12px">
     <strong>${esc(a.username)}</strong> <span class="muted">· ${a.session_min != null ? fmtMin(a.session_min) + ' since login' : ''} · ${esc(a.ip)}</span>
     <div class="tablewrap"><table><thead><tr><th>Character</th><th>Level</th><th>Class</th><th>Zone</th><th>Played</th><th>Gold</th></tr></thead><tbody>
-    ${a.characters.map(c => `<tr><td>${esc(c.name)}</td><td>${c.level}</td><td>${esc(c.race)} ${esc(c.class)}</td><td>${esc(c.zone)}</td><td>${c.played_h} h</td><td>${c.gold}</td></tr>`).join('')}
+    ${a.characters.map(c => `<tr><td>${cl(c.name)}</td><td>${c.level}</td><td>${esc(c.race)} ${esc(c.class)}</td><td>${esc(c.zone)}</td><td>${c.played_h} h</td><td>${c.gold}</td></tr>`).join('')}
     </tbody></table></div></div>`).join('') : '<span class="muted">Nobody logged in.</span>';
   $('#actAccounts tbody').innerHTML = d.accounts.map(a => `<tr><td>${esc(a.username)}</td><td>${a.chars}</td><td>${a.max_level}</td>
     <td>${a.played_h} h</td><td>${a.gold}</td><td class="muted">${esc(a.last_login || 'never')}</td></tr>`).join('');
@@ -760,7 +862,7 @@ function renderChar() {
   localSet('char', c.name);
   $('#charInfo').textContent = `${c.race} ${c.class}, ${c.zone}, ${c.gold} gold, account ${c.username}`;
   const alts = chars.filter(x => x.account === c.account && x.name !== c.name);
-  $('#altTable tbody').innerHTML = alts.length ? alts.map(a => `<tr><td>${esc(a.name)}</td><td>${a.level} ${esc(a.class)}</td>
+  $('#altTable tbody').innerHTML = alts.length ? alts.map(a => `<tr><td>${cl(a.name)}</td><td>${a.level} ${esc(a.class)}</td>
     <td>${a.online ? '<span class="dot ok"></span>online' : '<span class="muted">offline</span>'}</td>
     <td class="wrap">${a.online
       ? `<button class="btn primary" onclick="altReady('${esc(a.name)}',this)" title="Level to ${c.level}, learn spells and skills, autogear up to legendary, sell junk (talents untouched)">Ready up</button>
@@ -892,7 +994,7 @@ async function loadBots() {
   $('#botSettings').textContent = `${s.MaxRandomBots} random bots online at a time · levels: ${s.SyncLevelWithPlayers === '1' ? 'synced to highest player' : 'level-bracket module (weighted to real players)'}`
     + ` · concentrate in player zones: ${s.RandomBotConcentrateInPlayerZone === '1' ? 'on' : 'off'} · alt auto-login: ${s.BotAutologin === '1' ? 'on' : 'off'}`
     + (d.live ? ' · live figures' : ' · from last save (world server down)');
-  $('#botNear tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${esc(p.name)}</td><td>${p.level}</td><td>${esc(p.zone)}</td>
+  $('#botNear tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${cl(p.name)}</td><td>${p.level}</td><td>${esc(p.zone)}</td>
     <td>${p.bots_in_zone}</td><td>${p.bots_near_level}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">No real players online.</td></tr>';
   const bars = (rows, key) => { const max = Math.max(1, ...rows.map(r => r.n));
     return rows.map(r => `<tr><td style="width:40%">${esc(r[key])}</td><td style="width:50%"><div class="bar" style="width:${r.n / max * 100}%"></div></td><td>${r.n}</td></tr>`).join(''); };
