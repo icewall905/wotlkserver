@@ -133,6 +133,8 @@ a { color: var(--accent); }
 .skillrow img { width: 20px; height: 20px; border-radius: 3px; }
 .skillrow .bar2 { margin-top: 0; }
 .trees { display: flex; gap: 6px; }
+.autopilot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
+.autopilot.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .trees .stat { flex: 1; }
 a.cl { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--muted); cursor: pointer; }
 a.cl:hover { color: var(--accent); }
@@ -397,6 +399,7 @@ a.cl:hover { color: var(--accent); }
   <div class="cvtop"><div class="sheethead" id="cvHead"></div>
     <div class="row" style="gap:6px"><span class="muted" id="cvUpd" style="font-size:12px"></span><span id="cvExtra"></span>
       <button class="btn" onclick="viewChar(cvName)">Refresh</button><button class="btn" onclick="closeChar()">Close</button></div></div>
+  <div id="cvAuto"></div>
   <div id="cvBars"></div>
   <div class="statgrid" id="cvStats" style="grid-template-columns:repeat(auto-fit,minmax(90px,1fr));margin-bottom:12px"></div>
   <div class="agdetail">
@@ -478,7 +481,7 @@ async function loadStatus() {
   $('#kErr').textContent = d.errors?.count ?? '–';
   $('#kErrSub').textContent = d.errors?.note || 'since startup finished';
 
-  $('#ovPlayers tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${cl(p.name)}</td><td>${p.level} ${esc(p.class)}</td>
+  $('#ovPlayers tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${cl(p.name)}${p.autopilot ? ' <span class="tag" style="color:var(--accent)">autopilot</span>' : ''}</td><td>${p.level} ${esc(p.class)}</td>
     <td>${esc(p.zone)}<div class="muted" style="font-size:12px">${esc(p.map)}</div></td><td>${p.latency} ms</td>
     <td class="wrap">${p.bots.length ? p.bots.map(cl).join(', ') : '<span class="muted">none</span>'}</td></tr>`).join('')
     : `<tr><td colspan="5" class="muted">${d.world_up ? 'Nobody online.' : 'World server is not running.'}</td></tr>`;
@@ -758,6 +761,10 @@ let cvName = null, cvTimer = null;
 const cl = n => n ? `<a class="cl" onclick="viewChar('${esc(n)}')">${esc(n)}</a>` : '';
 const REPC = {Exalted: '#2ea0a0', Revered: '#2ea043', Honored: '#3fb950', Friendly: '#56d364', Neutral: '#d29922', Unfriendly: '#db6d28', Hostile: '#f85149', Hated: '#b62324'};
 const bagsHtml = items => items.length ? items.map(it => `<a href="https://www.wowhead.com/wotlk/item=${it.entry}" target="_blank" rel="noopener" style="--qc:${QCOLOR[it.quality] || '#555'}" title="${esc(it.name)}${it.count > 1 ? ' x' + it.count : ''} (item level ${it.ilvl})"><img src="${it.icon}" alt="">${it.count > 1 ? `<span>${it.count}</span>` : ''}</a>`).join('') : '<div class="muted">Empty.</div>';
+async function autopilot(mode, btn) {
+  await act(btn, () => api(`/api/character/${encodeURIComponent(cvName)}/autopilot`, {method: 'POST', body: {mode}}));
+  viewChar(cvName);
+}
 function closeChar() { $('#cv').classList.remove('open'); cvName = null; clearInterval(cvTimer); }
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && cvName) closeChar(); });
 async function viewChar(name) {
@@ -774,6 +781,14 @@ async function viewChar(name) {
     <div class="muted">Level ${i.level} ${esc(i.race)} ${esc(i.class)} · ${esc(i.faction)}${i.guild ? ` · &lt;${esc(i.guild)}&gt; ${esc(i.guild_rank || '')}` : ''}</div>
     <div class="muted" style="font-size:12px">${i.online ? '<span class="dot ok"></span>' : '<span class="dot bad"></span>'}${esc(where)} · account ${esc(i.account)}${i.group.length ? ' · party: ' + i.group.map(g => cl(g.split(':')[0])).join(', ') : ''}</div></div>`;
   $('#cvExtra').innerHTML = i.kind === 'agent' ? `<button class="btn" onclick="closeChar();document.querySelector('nav button[data-tab=agents]').click();selectAgent(${i.guid})">Open life story</button>` : '';
+  const ap = i.autopilot;
+  $('#cvAuto').innerHTML = !ap ? '' : `<div class="autopilot ${ap.on ? 'on' : ''}"><b>Autopilot</b>
+    ${ap.on ? `<span><span class="dot ok"></span>${ap.mode === 'quest' ? 'Questing' : 'Grinding'} since ${esc(fmtTime(ap.since))}</span>
+      <span class="muted">Now ${esc(ap.doing || '…')} · ${esc(ap.stats)}</span>` : '<span class="muted">Off. Lets playerbots play this character while you are away; take over again any time.</span>'}
+    <span style="flex:1"></span>
+    <button class="btn ${ap.on && ap.mode === 'quest' ? 'primary' : ''}" onclick="autopilot('quest',this)" title="Pick up, do and hand in quests, fight along the way">Quest</button>
+    <button class="btn ${ap.on && ap.mode === 'grind' ? 'primary' : ''}" onclick="autopilot('grind',this)" title="Stay around here and fight monsters of your level">Grind</button>
+    ${ap.on ? `<button class="btn danger" onclick="autopilot('off',this)">Take control</button>` : ''}</div>`;
   const xp = i.xpnext ? Math.round(i.xp / i.xpnext * 100) : null;
   $('#cvBars').innerHTML = i.live ? `<div class="bar2" style="height:10px" title="Health"><div class="hp" style="width:${i.hp}%"></div></div>
     <div class="bar2" style="height:10px" title="Experience"><div class="xp" style="width:${xp ?? 0}%"></div></div>

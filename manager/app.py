@@ -208,21 +208,29 @@ def zone_name(zone_id):
     return ZONES.get(zone_id, f"Zone {zone_id}")
 
 
+def live_who():
+    """(players, bots) in the world right now from ".dash who", or None if the server is down.
+
+    players maps each real player (someone at a client) to whether autopilot is on; bots are their alt bots."""
+    ok, text = soap("dash who")
+    if not ok:
+        return None
+    players, bots = {}, set()
+    for line in text.splitlines():
+        parts = line.split("\t")
+        if parts[0] == "P" and len(parts) >= 9:
+            players[parts[1]] = len(parts) > 9 and parts[9] == "1"
+            bots.update(b for b in parts[8].split(",") if b)
+    return players, bots
+
+
 def live_online_names():
     """Real players and their bots that are in the world right now, or None if the server is down.
 
     The characters.online flag is unreliable for alts: a logout clears it for every character on
     the account, so sending one alt home makes the others look offline while they still play."""
-    ok, text = soap("dash who")
-    if not ok:
-        return None
-    names = set()
-    for line in text.splitlines():
-        parts = line.split("\t")
-        if parts[0] == "P" and len(parts) >= 9:
-            names.add(parts[1])
-            names.update(b for b in parts[8].split(",") if b)
-    return names
+    who = live_who()
+    return None if who is None else set(who[0]) | who[1]
 
 
 def char_online(name):
@@ -1182,7 +1190,8 @@ def parse_who(text):
             players.append({"name": parts[1], "level": int(parts[2]),
                             "class": CLASSES.get(int(parts[3]), parts[3]), "zone": zone_name(int(parts[4])), "zone_id": int(parts[4]),
                             "map": map_name(int(parts[5])), "latency": int(parts[6]), "account": int(parts[7]),
-                            "bots": [b for b in parts[8].split(",") if b]})
+                            "bots": [b for b in parts[8].split(",") if b],
+                            "autopilot": len(parts) > 9 and parts[9] == "1"})
         elif parts[0] == "T" and len(parts) >= 5:
             totals = {"random": int(parts[1]), "alts": int(parts[2]), "dead": int(parts[3]), "combat": int(parts[4])}
     totals.update(factions)
@@ -1513,6 +1522,40 @@ def item_row(g):
             "icon": ICON_URL.format(size="medium", name=ITEM_ICONS.get(g["displayid"], "inv_misc_questionmark"))}
 
 
+RPG_STATUS = {"GO_GRIND": "heading to a good spot to fight", "GO_CAMP": "heading back to town",
+              "WANDER_NPC": "visiting NPCs (quests, vendors, trainers)", "WANDER_RANDOM": "exploring around",
+              "IDLE": "deciding what to do next", "REST": "taking a short rest", "DO_QUEST": "working on a quest",
+              "TRAVEL_FLIGHT": "on a flight", "OUTDOOR_PVP": "in world PvP"}
+
+
+def autopilot_status(name):
+    ok, out = soap(f"dash autopilot {name} status")
+    if not ok:
+        return None
+    kv = dict(line.split("\t", 1) for line in out.splitlines() if "\t" in line)
+    if kv.get("autopilot") != "on":
+        return {"on": False}
+    st = {"on": True, "mode": kv.get("mode"), "stats": kv.get("stats", ""),
+          "since": _iso(datetime.datetime.fromtimestamp(int(kv.get("since", "0") or 0)))}
+    rpg = kv.get("rpg", "").replace("Status: ", "")
+    st["doing"] = RPG_STATUS.get(rpg, rpg.lower().replace("_", " "))
+    if kv.get("quest", "").isdigit() and int(kv["quest"]):
+        q = query("SELECT LogTitle FROM acore_world.quest_template WHERE ID = %s", (int(kv["quest"]),))
+        if q:
+            st["doing"] += f": {q[0]['LogTitle']}"
+    return st
+
+
+@app.post("/api/character/<name>/autopilot")
+@requires_auth
+def api_character_autopilot(name):
+    mode = (request.get_json(force=True, silent=True) or {}).get("mode", "")
+    if not valid_char(name) or mode not in ("quest", "grind", "off"):
+        return jsonify(ok=False, output="Bad request"), 400
+    ok, out = soap(f"dash autopilot {name} {mode}")
+    return jsonify(ok=ok, output=out.strip())
+
+
 @app.get("/api/character/search")
 @requires_auth
 def api_character_search():
@@ -1537,8 +1580,10 @@ def api_character_view(name):
     guid, race, cls = c["guid"], c["race"], c["class"]
     is_rndbot = c["username"].upper().startswith("RNDBOT")
     agent = query("SELECT guid FROM acore_characters.dash_agents WHERE guid = %s", (guid,))
-    live = live_online_names()
+    who = live_who()
+    live = None if who is None else set(who[0]) | who[1]
     online = bool(c["online"]) if live is None or is_rndbot else name in live
+    at_client = who is not None and name in who[0]
     st = agent_runner.read_state(name) if online else None
     if not st or not st.get("online"):
         st = None
@@ -1662,6 +1707,7 @@ def api_character_view(name):
     mp = {"zone": zone_id, "name": zone_name(zone_id), "pos": pos, "trail": [], "live": bool(st),
           "url": f"https://wow.zamimg.com/images/wow/wrath/maps/enus/original/{zone_id}.jpg",
           "fallback": f"https://wow.zamimg.com/images/wow/maps/enus/original/{zone_id}.jpg"} if pos else None
+    info["autopilot"] = autopilot_status(name) if at_client else None
     return jsonify(info=info, visual=visual, map=mp, equipment=equipment, bags=bags, bank=bank, keys=keys,
                    skills=skills, talents=talents, quests=quests, live_quests=st["quests"] if st else None,
                    achievements=recent, reputations=reps[:30],

@@ -239,6 +239,164 @@ index 080109c..52062ac 100644
      // Off the world thread: a missing Ollama must not stall startup.
      std::thread(RunProbe, base, model).detach();
  }
+diff --git a/src/mod-ollama-chat_dispatch.cpp b/src/mod-ollama-chat_dispatch.cpp
+index a940141..f9d9444 100644
+--- a/src/mod-ollama-chat_dispatch.cpp
++++ b/src/mod-ollama-chat_dispatch.cpp
+@@ -330,7 +330,7 @@ namespace
+         if (!bot || !bot->IsInWorld())
+             return;
+ 
+-        PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
++        PlayerbotAI* botAI = OllamaBotAI(bot);
+         if (!botAI)
+             return;
+ 
+@@ -732,7 +732,7 @@ Channel* OllamaResolveZoneChannel(Player* bot, uint32_t chatChannelId)
+     if (!mgr)
+         return nullptr;
+ 
+-    PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
++    PlayerbotAI* botAI = OllamaBotAI(bot);
+     std::string zoneName;
+     if (botAI)
+         if (AreaTableEntry const* zone = botAI->GetCurrentZone())
+diff --git a/src/mod-ollama-chat_events.cpp b/src/mod-ollama-chat_events.cpp
+index 867f116..e715d9e 100644
+--- a/src/mod-ollama-chat_events.cpp
++++ b/src/mod-ollama-chat_events.cpp
+@@ -193,7 +193,7 @@ void OllamaBotEventChatter::DispatchGameEvent(Player* source, std::string type,
+             if (!player || !player->IsInWorld() || player->GetGuildId() != guildId)
+                 continue;
+ 
+-            PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(player);
++            PlayerbotAI* ai = OllamaBotAI(player);
+             if (ai && ai->IsBotAI())
+                 candidateBots.push_back(player);
+         }
+@@ -206,7 +206,7 @@ void OllamaBotEventChatter::DispatchGameEvent(Player* source, std::string type,
+             if (!player || !player->IsWithinDist(source, g_EventChatterRealPlayerDistance, false))
+                 continue;
+ 
+-            PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(player);
++            PlayerbotAI* ai = OllamaBotAI(player);
+             if (ai && ai->IsBotAI())
+                 candidateBots.push_back(player);
+         }
+@@ -297,7 +297,7 @@ std::string OllamaBotEventChatter::BuildPrompt(Player* bot, std::string promptTe
+     if (!bot || promptTemplate.empty())
+         return "";
+ 
+-    PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
++    PlayerbotAI* ai = OllamaBotAI(bot);
+     if (!ai || !ai->GetChatHelper())
+         return "";
+ 
+diff --git a/src/mod-ollama-chat_expression.cpp b/src/mod-ollama-chat_expression.cpp
+index 7948b09..1778194 100644
+--- a/src/mod-ollama-chat_expression.cpp
++++ b/src/mod-ollama-chat_expression.cpp
+@@ -729,7 +729,7 @@ void ChatOnEmote::OnPlayerTextEmote(Player* player, uint32 textEmote,
+     if (!bot || bot == player || !bot->IsInWorld())
+         return;
+ 
+-    PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
++    PlayerbotAI* botAI = OllamaBotAI(bot);
+     if (!botAI || !botAI->IsBotAI())
+         return;
+ 
+diff --git a/src/mod-ollama-chat_handler.cpp b/src/mod-ollama-chat_handler.cpp
+index a03d8a3..ca637a5 100644
+--- a/src/mod-ollama-chat_handler.cpp
++++ b/src/mod-ollama-chat_handler.cpp
+@@ -335,13 +335,13 @@ bool PlayerBotChatHandler::OnPlayerCanUseChat(Player* player, uint32_t type, uin
+             return true;
+ 
+         // Check if sender is a bot - if so, don't trigger Ollama responses for bot-to-bot whispers
+-        PlayerbotAI* senderAI = PlayerbotsMgr::instance().GetPlayerbotAI(player);
++        PlayerbotAI* senderAI = OllamaBotAI(player);
+         if (senderAI && senderAI->IsBotAI())
+         {
+             return true;
+         }
+ 
+-        PlayerbotAI* receiverAI = PlayerbotsMgr::instance().GetPlayerbotAI(receiver);
++        PlayerbotAI* receiverAI = OllamaBotAI(receiver);
+         if (!receiverAI || !receiverAI->IsBotAI())
+             return true;
+     }
+@@ -1172,7 +1172,7 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
+         return;
+     }
+              
+-    PlayerbotAI* senderAI = PlayerbotsMgr::instance().GetPlayerbotAI(player);
++    PlayerbotAI* senderAI = OllamaBotAI(player);
+     bool senderIsBot = (senderAI && senderAI->IsBotAI());
+ 
+     // --- conversation governor -------------------------------------------
+@@ -1261,7 +1261,7 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
+         }
+         
+         // For whispers, only the receiver bot can respond (if it's a bot)
+-        PlayerbotAI* receiverAI = PlayerbotsMgr::instance().GetPlayerbotAI(receiver);
++        PlayerbotAI* receiverAI = OllamaBotAI(receiver);
+         if (receiverAI && receiverAI->IsBotAI())
+         {
+             eligibleBots.push_back(receiver);
+@@ -1329,7 +1329,7 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
+                 continue;
+                 
+             // Skip non-bots early
+-            PlayerbotAI* candidateAI = PlayerbotsMgr::instance().GetPlayerbotAI(candidate);
++            PlayerbotAI* candidateAI = OllamaBotAI(candidate);
+             if (!candidateAI || !candidateAI->IsBotAI())
+                 continue;
+             
+@@ -1411,7 +1411,7 @@ void PlayerBotChatHandler::ProcessChat(Player* player, uint32_t /*type*/, uint32
+             Player* candidate = itr.second;
+             if (candidate->IsInWorld() && candidate != player)
+             {
+-                PlayerbotAI* candidateAI = PlayerbotsMgr::instance().GetPlayerbotAI(candidate);
++                PlayerbotAI* candidateAI = OllamaBotAI(candidate);
+                 if (candidateAI && candidateAI->IsBotAI())
+                 {
+                     // For Guild/Party, verify there's a real player in that guild/party
+@@ -1782,7 +1782,7 @@ static bool IsBotEligibleForChatChannelLocal(Player* bot, Player* player, ChatCh
+                     (void*)bot, (void*)player, (bot == player));
+         return false;
+     }
+-    if (!PlayerbotsMgr::instance().GetPlayerbotAI(bot))
++    if (!OllamaBotAI(bot))
+     {
+         if (g_DebugEnabled)
+             LOG_INFO("module.ollamachat", "[Ollama Chat] IsBotEligible: Bot {} FAILED - no PlayerbotAI", bot->GetName());
+@@ -1793,7 +1793,7 @@ static bool IsBotEligibleForChatChannelLocal(Player* bot, Player* player, ChatCh
+     if (source == SRC_WHISPER_LOCAL)
+     {
+         // Don't allow bot-to-bot whisper responses
+-        PlayerbotAI* senderAI = PlayerbotsMgr::instance().GetPlayerbotAI(player);
++        PlayerbotAI* senderAI = OllamaBotAI(player);
+         if (senderAI && senderAI->IsBotAI())
+         {
+             return false;
+@@ -1905,7 +1905,7 @@ std::string GenerateBotPrompt(Player* bot, std::string playerMessage, Player* pl
+     if (!bot || !player) {
+         return "";
+     }
+-    PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
++    PlayerbotAI* botAI = OllamaBotAI(bot);
+     if (botAI == nullptr) {
+         return "";
+     }
+@@ -2050,7 +2050,7 @@ std::string BuildEmoteReactionPrompt(Player* bot, Player* player, uint32_t textE
+     if (!bot || !player)
+         return "";
+ 
+-    PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
++    PlayerbotAI* botAI = OllamaBotAI(bot);
+     if (!botAI || !botAI->GetChatHelper())
+         return "";
+ 
 diff --git a/src/mod-ollama-chat_httpclient.cpp b/src/mod-ollama-chat_httpclient.cpp
 index 8820fc1..6197418 100644
 --- a/src/mod-ollama-chat_httpclient.cpp
@@ -254,3 +412,120 @@ index 8820fc1..6197418 100644
              { "User-Agent",   "AzerothCore-OllamaChat/2.0" },
              { "Accept",       "application/json" },
          };
+diff --git a/src/mod-ollama-chat_random.cpp b/src/mod-ollama-chat_random.cpp
+index 710070b..d65fbf8 100644
+--- a/src/mod-ollama-chat_random.cpp
++++ b/src/mod-ollama-chat_random.cpp
+@@ -131,7 +131,7 @@ namespace
+ 
+     std::string BuildRandomChatterPrompt(Player* bot, const std::string& environmentInfo)
+     {
+-        PlayerbotAI* botAI = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
++        PlayerbotAI* botAI = OllamaBotAI(bot);
+         if (!botAI || !botAI->GetChatHelper())
+             return "";
+ 
+@@ -290,7 +290,7 @@ void OllamaBotRandomChatter::HandleRandomChatter()
+         if (!bot || !bot->IsInWorld() || bot->IsBeingTeleported())
+             continue;
+ 
+-        PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
++        PlayerbotAI* ai = OllamaBotAI(bot);
+         if (!ai || !ai->IsBotAI())
+             continue;
+ 
+diff --git a/src/mod-ollama-chat_topics.cpp b/src/mod-ollama-chat_topics.cpp
+index 8779b2a..675f59d 100644
+--- a/src/mod-ollama-chat_topics.cpp
++++ b/src/mod-ollama-chat_topics.cpp
+@@ -127,7 +127,7 @@ namespace
+ 
+     std::string ClassName(Player* p)
+     {
+-        PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(p);
++        PlayerbotAI* ai = OllamaBotAI(p);
+         if (ai && ai->GetChatHelper())
+             return ai->GetChatHelper()->FormatClass(p->getClass());
+         return "adventurer";
+@@ -135,7 +135,7 @@ namespace
+ 
+     std::string RaceName(Player* p)
+     {
+-        PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(p);
++        PlayerbotAI* ai = OllamaBotAI(p);
+         if (ai && ai->GetChatHelper())
+             return ai->GetChatHelper()->FormatRace(p->getRace());
+         return "traveller";
+@@ -409,7 +409,7 @@ namespace
+         // Where they are.
+         if (!g_EnvCommentZoneLandmark.empty())
+         {
+-            PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
++            PlayerbotAI* ai = OllamaBotAI(bot);
+             std::string areaName = "these parts";
+             std::string zoneName = "this land";
+ 
+@@ -492,7 +492,7 @@ namespace
+         // Where the bot could go questing next.
+         if (!g_EnvCommentQuestArea.empty())
+         {
+-            PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(bot);
++            PlayerbotAI* ai = OllamaBotAI(bot);
+             if (ai)
+             {
+                 if (AreaTableEntry const* zone = ai->GetCurrentZone())
+@@ -782,7 +782,7 @@ void Topics_BroadcastEventToNearby(Player* actor, const std::string& text, float
+             continue;
+ 
+         // Only bots keep a memory; real players have their own.
+-        PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(witness);
++        PlayerbotAI* ai = OllamaBotAI(witness);
+         if (!ai || !ai->IsBotAI())
+             continue;
+ 
+diff --git a/src/mod-ollama-chat_world.cpp b/src/mod-ollama-chat_world.cpp
+index 653d86a..267bcd7 100644
+--- a/src/mod-ollama-chat_world.cpp
++++ b/src/mod-ollama-chat_world.cpp
+@@ -25,10 +25,16 @@ bool OllamaIsBotPlayer(Player* player)
+             return true;
+     }
+ 
+-    PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(player);
++    PlayerbotAI* ai = OllamaBotAI(player);
+     return ai && ai->IsBotAI();
+ }
+ 
++PlayerbotAI* OllamaBotAI(Player* player)
++{
++    PlayerbotAI* ai = PlayerbotsMgr::instance().GetPlayerbotAI(player);
++    return ai && !IsSelfBot(player) ? ai : nullptr;
++}
++
+ std::string OllamaContinentName(Player* player)
+ {
+     Map* map = player ? player->GetMap() : nullptr;
+diff --git a/src/mod-ollama-chat_world.h b/src/mod-ollama-chat_world.h
+index 949cbdf..39b576f 100644
+--- a/src/mod-ollama-chat_world.h
++++ b/src/mod-ollama-chat_world.h
+@@ -8,6 +8,7 @@
+ 
+ class Channel;
+ class Player;
++class PlayerbotAI;
+ 
+ // --------------------------------------------------------------------------
+ // One pass over the online player list, reused for the whole of a message or
+@@ -45,6 +46,11 @@ class Player;
+ // The AI lookup is kept as a fallback so a bot driven by some other mechanism still reads as a bot.
+ bool OllamaIsBotPlayer(Player* player);
+ 
++// The player's PlayerbotAI if a bot plays it, else nullptr. A SelfBot (a real
++// player whose own character is on autopilot) has an AI too, but a person is
++// still at the client, so it reads as a real player here.
++PlayerbotAI* OllamaBotAI(Player* player);
++
+ inline bool OllamaIsRealPlayer(Player* player)
+ {
+     return player && !OllamaIsBotPlayer(player);

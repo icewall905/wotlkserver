@@ -399,7 +399,8 @@ public:
 
     // .dash who
     // Machine-readable snapshot of who is online, for the dashboard overview. One line each:
-    //   P <name> <level> <class> <zoneId> <mapId> <latencyMs> <accountId> <bot1,bot2,...>   real player
+    //   P <name> <level> <class> <zoneId> <mapId> <latencyMs> <accountId> <bot1,bot2,...> <autopilot 0|1>
+    //                                                                                       real player
     //   T <randomBots> <altBots> <deadBots> <inCombatBots>                                  totals
     //   L <level> <count>                                                                   random bots per level
     //   Z <zoneId> <count>                                                                  random bots per zone
@@ -415,8 +416,10 @@ public:
             if (!player || !player->IsInWorld())
                 continue;
 
+            // A SelfBot (autopilot) is still a person at a client, so it counts as a player.
             PlayerbotAI* ai = GET_PLAYERBOT_AI(player);
-            if (ai)
+            bool selfBot = ai && IsSelfBot(player);
+            if (ai && !selfBot)
             {
                 if (sRandomPlayerbotMgr.IsRandomBot(player))
                 {
@@ -447,9 +450,10 @@ public:
                 }
             }
 
-            handler->PSendSysMessage("P\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", player->GetName(), player->GetLevel(),
+            handler->PSendSysMessage("P\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}", player->GetName(), player->GetLevel(),
                                      player->getClass(), player->GetZoneId(), player->GetMapId(),
-                                     player->GetSession()->GetLatency(), player->GetSession()->GetAccountId(), bots);
+                                     player->GetSession()->GetLatency(), player->GetSession()->GetAccountId(), bots,
+                                     selfBot ? 1 : 0);
         }
 
         handler->PSendSysMessage("T\t{}\t{}\t{}\t{}", randomBots, altBots, deadBots, combatBots);
