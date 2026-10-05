@@ -3,172 +3,360 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AzerothCore Manager</title>
+<script>try { const t = localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  document.documentElement.dataset.theme = t; } catch { document.documentElement.dataset.theme = 'dark'; }</script>
+<title>Azeroth Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+/* ---------------------------------------------------------------- tokens */
 :root {
-  --bg: #f6f5f2; --panel: #ffffff; --text: #1f1e1c; --muted: #6b6862; --border: #e3e0da;
-  --accent: #2f5fd0; --ok: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --code: #f0eee9;
+  color-scheme: dark;
+  --bg: #0a0d14; --bg-glow1: rgba(91, 140, 255, .10); --bg-glow2: rgba(167, 139, 250, .08);
+  --panel: #121722; --panel2: #171d2b; --raise: #1c2333;
+  --text: #e7eaf1; --muted: #8a93a8; --faint: #5d6579;
+  --border: rgba(255, 255, 255, .07); --border2: rgba(255, 255, 255, .12);
+  --accent: #6b94ff; --accent2: #a78bfa; --accent-soft: rgba(107, 148, 255, .14);
+  --gold: #f2c35b; --ok: #3dd68c; --warn: #f5b84a; --bad: #f7716b;
+  --ok-soft: rgba(61, 214, 140, .14); --warn-soft: rgba(245, 184, 74, .14); --bad-soft: rgba(247, 113, 107, .14);
+  --code: rgba(255, 255, 255, .035);
+  --shadow: 0 1px 0 rgba(255, 255, 255, .03) inset, 0 8px 24px rgba(0, 0, 0, .25);
+  --r: 14px; --r-sm: 9px;
+  --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #151514; --panel: #1f1f1d; --text: #ecebe8; --muted: #9d9a93; --border: #33322f;
-          --accent: #7a9cf0; --ok: #4cc27f; --warn: #e0a84a; --bad: #e66b5c; --code: #262624; }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6fb; --bg-glow1: rgba(91, 140, 255, .10); --bg-glow2: rgba(167, 139, 250, .08);
+  --panel: #ffffff; --panel2: #f7f8fc; --raise: #eef1f8;
+  --text: #171b26; --muted: #5f6880; --faint: #9aa2b5;
+  --border: rgba(20, 30, 60, .08); --border2: rgba(20, 30, 60, .14);
+  --accent: #3d6ef5; --accent2: #7c5cf0; --accent-soft: rgba(61, 110, 245, .10);
+  --gold: #b58a1c; --ok: #12935a; --warn: #b7791f; --bad: #d64541;
+  --ok-soft: rgba(18, 147, 90, .10); --warn-soft: rgba(183, 121, 31, .12); --bad-soft: rgba(214, 69, 65, .10);
+  --code: rgba(20, 30, 60, .04);
+  --shadow: 0 1px 2px rgba(20, 30, 60, .05), 0 6px 20px rgba(20, 30, 60, .06);
 }
+
+/* ---------------------------------------------------------------- base */
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text);
-       font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; align-items: center; gap: 16px; padding: 14px 20px;
-         border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap; }
-header h1 { font-size: 16px; margin: 0; font-weight: 600; }
-nav { display: flex; gap: 4px; flex-wrap: wrap; }
-nav button { background: none; border: 0; padding: 6px 12px; border-radius: 6px; color: var(--muted); cursor: pointer; font: inherit; }
-nav button.active { background: var(--code); color: var(--text); }
-main { max-width: 1200px; margin: 0 auto; padding: 20px 16px; }
-section { display: none; } section.active { display: block; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 16px; }
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
-.card h3 { margin: 0 0 8px; font-size: 13px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
-.big { font-size: 28px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: var(--muted); }
-.dot.ok { background: var(--ok); } .dot.bad { background: var(--bad); } .dot.warn { background: var(--warn); }
+html, body { height: 100%; }
+body { margin: 0; color: var(--text); font: 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased;
+       background: radial-gradient(1200px 600px at 85% -10%, var(--bg-glow2), transparent 60%),
+                   radial-gradient(900px 500px at -10% 0%, var(--bg-glow1), transparent 60%), var(--bg);
+       background-attachment: fixed; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+::selection { background: var(--accent-soft); }
+* { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
 .muted { color: var(--muted); }
-button.btn { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
-             background: var(--panel); color: var(--text); cursor: pointer; }
-button.btn:hover { border-color: var(--accent); }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.danger { color: var(--bad); }
-button:disabled { opacity: .5; cursor: default; }
+.help { white-space: pre-wrap; color: var(--muted); font-size: 12px; }
+
+/* ---------------------------------------------------------------- shell */
+.app { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; }
+aside.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 6px; padding: 18px 12px;
+             border-right: 1px solid var(--border); background: color-mix(in srgb, var(--panel) 70%, transparent);
+             backdrop-filter: blur(14px); }
+.brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; }
+.brand .logo { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none;
+               background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 6px 18px rgba(107, 148, 255, .35); }
+.brand .logo svg { width: 20px; height: 20px; color: #fff; }
+.brand b { display: block; font-size: 15px; letter-spacing: -.01em; }
+.brand span { display: block; font-size: 11px; color: var(--muted); }
+nav { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; flex: 1; }
+nav .grp { font-size: 10.5px; text-transform: uppercase; letter-spacing: .09em; color: var(--faint); font-weight: 600; padding: 14px 10px 6px; }
+nav button { display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0; padding: 8px 10px; border-radius: 9px;
+             color: var(--muted); cursor: pointer; font: 500 13.5px var(--sans); text-align: left; transition: background .15s, color .15s; }
+nav button svg { width: 17px; height: 17px; flex: none; opacity: .85; }
+nav button:hover { background: var(--code); color: var(--text); }
+nav button.active { background: var(--accent-soft); color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+nav button.active svg { color: var(--accent); opacity: 1; }
+.sidefoot { border-top: 1px solid var(--border); padding: 12px 6px 0; display: flex; flex-direction: column; gap: 8px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500;
+        background: var(--code); color: var(--muted); border: 1px solid var(--border); white-space: nowrap; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+.pill.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.pill.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.pill.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.pill .dot { margin: 0; }
+.themebtn { display: flex; align-items: center; gap: 8px; background: none; border: 1px solid var(--border); color: var(--muted);
+            border-radius: 9px; padding: 6px 10px; font: 500 12px var(--sans); cursor: pointer; }
+.themebtn:hover { color: var(--text); border-color: var(--border2); }
+.themebtn svg { width: 15px; height: 15px; }
+
+.content { min-width: 0; display: flex; flex-direction: column; }
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 16px; padding: 14px 28px;
+          border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 78%, transparent); backdrop-filter: blur(14px); }
+.topbar h2 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -.02em; }
+.topbar .sub { color: var(--muted); font-size: 12.5px; }
+.topbar .search { margin-left: auto; position: relative; width: min(320px, 40vw); }
+.topbar .search input { width: 100%; padding-left: 34px; border-radius: 999px; background: var(--panel); }
+.topbar .search svg { position: absolute; left: 11px; top: 50%; translate: 0 -50%; width: 15px; height: 15px; color: var(--muted); pointer-events: none; }
+main { width: 100%; max-width: 1480px; margin: 0 auto; padding: 22px 28px 48px; }
+section { display: none; animation: fade .25s ease; } section.active { display: block; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  aside.side, nav { min-width: 0; }
+  aside.side { position: sticky; top: 0; z-index: 30; height: auto; flex-direction: row; align-items: center; padding: 8px 10px; gap: 8px;
+               border-right: 0; border-bottom: 1px solid var(--border); }
+  .brand { padding: 0; } .brand div { display: none; }
+  nav { flex-direction: row; overflow-x: auto; overflow-y: hidden; }
+  nav .grp { display: none; }
+  nav button { width: auto; white-space: nowrap; padding: 7px 10px; }
+  nav button.active { box-shadow: inset 0 -2px 0 var(--accent); }
+  .sidefoot { display: none; }
+  .topbar { position: static; padding: 12px 16px; flex-wrap: wrap; }
+  .topbar .search { width: 100%; margin-left: 0; }
+  main { padding: 16px 16px 40px; }
+}
+
+/* ---------------------------------------------------------------- cards & layout */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 14px; margin-bottom: 14px; }
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); padding: 16px 18px; margin-bottom: 14px;
+        box-shadow: var(--shadow); min-width: 0; }
+.split > .card, .grid > .card { margin-bottom: 0; }
+.split { margin-bottom: 14px; }
+.card h3 { margin: 0 0 12px; font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .07em;
+           display: flex; align-items: center; gap: 8px; }
+.card h3::before { content: ""; width: 6px; height: 6px; border-radius: 2px; background: linear-gradient(135deg, var(--accent), var(--accent2)); flex: none; }
+.card p { margin: 8px 0; }
+.big { font-size: 30px; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-input, select { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
-                background: var(--bg); color: var(--text); min-width: 0; }
+
+.kpis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+@media (max-width: 1350px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.kpis.k4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 640px) { .kpis, .kpis.k4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpis .card { position: relative; overflow: hidden; padding: 16px 18px 14px; }
+.kpis .card::after { content: ""; position: absolute; inset: auto -30% -60% auto; width: 160px; height: 160px; border-radius: 50%;
+                     background: radial-gradient(closest-side, var(--kc, var(--accent-soft)), transparent); opacity: .9; pointer-events: none; }
+.kpis .card h3 { margin-bottom: 10px; }
+.kpis .card h3::before { display: none; }
+.kpis .kic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--kc, var(--accent-soft)); color: var(--ki, var(--accent)); }
+.kpis .kic svg { width: 16px; height: 16px; }
+.kpis .big { font-size: 26px; display: flex; align-items: center; }
+.kpis .muted { font-size: 12px; margin-top: 4px; }
+
+/* ---------------------------------------------------------------- controls */
+button.btn { font: 500 13px var(--sans); padding: 7px 13px; border-radius: var(--r-sm); border: 1px solid var(--border2);
+             background: var(--panel2); color: var(--text); cursor: pointer; transition: border-color .15s, background .15s, transform .05s; }
+button.btn:hover { border-color: var(--accent); background: var(--raise); }
+button.btn:active { transform: translateY(1px); }
+button.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent; color: #fff;
+                 box-shadow: 0 4px 14px rgba(107, 148, 255, .28); }
+button.primary:hover { filter: brightness(1.08); background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent; }
+button.danger { color: var(--bad); }
+button.danger:hover { border-color: var(--bad); background: var(--bad-soft); }
+button:disabled { opacity: .5; cursor: progress; }
+input, select { font: 13.5px var(--sans); padding: 7px 11px; border-radius: var(--r-sm); border: 1px solid var(--border2);
+                background: var(--panel2); color: var(--text); min-width: 0; outline: none; transition: border-color .15s, box-shadow .15s; }
+input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; vertical-align: -3px; }
 input.grow { flex: 1; }
+label { color: var(--muted); font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+
+/* ---------------------------------------------------------------- tables */
+.tablewrap { overflow-x: auto; margin: 0 -6px; padding: 0 6px; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-th { color: var(--muted); font-weight: 500; font-size: 12px; }
-.tablewrap { overflow-x: auto; }
-pre { background: var(--code); padding: 12px; border-radius: 8px; overflow: auto; max-height: 60vh;
-      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; margin: 0; }
-.q0 { color: #9d9d9d; } .q1 { color: var(--text); } .q2 { color: #1eff00; } .q3 { color: #0070dd; }
-.q4 { color: #a335ee; } .q5 { color: #ff8000; } .q6, .q7 { color: #e6cc80; }
-@media (prefers-color-scheme: light) { .q2 { color: #1a9c00; } .q6, .q7 { color: #a8862b; } }
-.bar { height: 10px; background: var(--accent); border-radius: 3px; min-width: 2px; }
-.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
-.telelist { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-top: 8px; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
+thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+th { color: var(--faint); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+tbody tr { transition: background .12s; }
+tbody tr:hover { background: var(--code); }
+tbody tr:last-child td { border-bottom: 0; }
+td.wrap { white-space: normal; }
+table.kv td { white-space: normal; padding: 7px 8px; }
+table.kv td:first-child { width: 1%; white-space: nowrap; padding-right: 16px; }
+table.kv td:last-child { overflow-wrap: anywhere; }
+
+pre { background: var(--code); border: 1px solid var(--border); padding: 14px; border-radius: var(--r-sm); overflow: auto; max-height: 60vh;
+      font: 12px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; margin: 0; }
+pre .le { color: var(--bad); } pre .lw { color: var(--warn); } pre .li { color: var(--muted); }
+
+/* ---------------------------------------------------------------- small pieces */
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--muted); vertical-align: 1px; }
+.dot.ok { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.dot.bad { background: var(--bad); box-shadow: 0 0 0 3px var(--bad-soft); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-soft); }
+.tag { display: inline-block; font-size: 11px; font-weight: 500; padding: 1px 8px; border-radius: 999px; background: var(--code);
+       color: var(--muted); border: 1px solid var(--border); vertical-align: 1px; }
+.bar { height: 8px; border-radius: 999px; min-width: 3px; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+td .bar { box-shadow: 0 0 10px rgba(107, 148, 255, .25); }
+.meter { display: inline-block; width: 48px; height: 6px; background: var(--code); border-radius: 999px; vertical-align: middle; overflow: hidden; margin-right: 6px; }
+.meter div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 999px; }
+.q0 { color: #9d9d9d; } .q1 { color: var(--text); } .q2 { color: #1eff00; } .q3 { color: #3d8bff; }
+.q4 { color: #b56cff; } .q5 { color: #ff8000; } .q6, .q7 { color: #e6cc80; }
+:root[data-theme="light"] .q2 { color: #1a9c00; } :root[data-theme="light"] .q6, :root[data-theme="light"] .q7 { color: #a8862b; }
+a.cl { color: inherit; text-decoration: none; cursor: pointer; border-bottom: 1px dotted var(--faint); }
+a.cl:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.who { display: inline-flex; align-items: center; gap: 8px; }
+.who img { width: 22px; height: 22px; border-radius: 6px; flex: none; box-shadow: 0 0 0 1px var(--border2); }
+.who a.cl { border-bottom: 0; font-weight: 600; }
+:root[data-theme="light"] .who a.cl, :root[data-theme="light"] .agent .nm, :root[data-theme="light"] .sheethead .title { filter: brightness(.62) saturate(1.4); }
+.lv { display: inline-grid; place-items: center; min-width: 26px; height: 20px; padding: 0 6px; border-radius: 6px; font-size: 11.5px;
+      font-weight: 650; background: var(--raise); color: var(--text); }
+.avatar { width: 28px; height: 28px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff;
+          margin-right: 8px; vertical-align: middle; flex: none; }
+.empty-state { color: var(--muted); padding: 16px 4px; text-align: center; }
+.telelist { max-height: 280px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--r-sm); margin-top: 8px; background: var(--panel2); }
 button.tele { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; background: none; border: 0;
-              border-bottom: 1px solid var(--border); padding: 6px 10px; color: var(--text); font: inherit; cursor: pointer; }
-button.tele:hover { background: var(--code); }
-.kpis { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
-.kpis .big { font-size: 24px; }
-table.kv td { white-space: normal; padding: 5px 8px; }
-.meter { display: inline-block; width: 60px; height: 8px; background: var(--code); border-radius: 4px; vertical-align: middle; overflow: hidden; }
-.meter div { height: 100%; background: var(--accent); }
-.agentgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-bottom: 12px; }
-.agent { background: var(--panel); border: 1px solid var(--border); border-top: 3px solid var(--cc); border-radius: 10px; padding: 12px; cursor: pointer; }
-.agent.sel { box-shadow: 0 0 0 2px var(--cc); }
+              border-bottom: 1px solid var(--border); padding: 8px 12px; color: var(--text); font: 13px var(--sans); cursor: pointer; }
+button.tele:last-child { border-bottom: 0; }
+button.tele:hover { background: var(--accent-soft); }
+button.btn.sm { padding: 5px 10px; font-size: 12px; }
+.altcell { white-space: normal; padding: 12px 10px; }
+.althead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.altbar { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
+.bgroup { display: flex; flex-wrap: wrap; gap: 6px; }
+.split.wide-left { grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); }
+@media (max-width: 1000px) { .split.wide-left { grid-template-columns: 1fr; } }
+.itemcell { display: inline-flex; align-items: center; gap: 10px; }
+.itemcell img { width: 34px; height: 34px; border-radius: 8px; border: 2px solid var(--qc, #555); flex: none; box-shadow: 0 0 10px color-mix(in srgb, var(--qc, #555) 30%, transparent); }
+.gold { color: var(--gold); font-weight: 600; }
+.gold::after { content: "g"; font-size: .8em; margin-left: 1px; opacity: .8; }
+.cmdlink { font-family: var(--mono); font-size: 12.5px; }
+
+/* ---------------------------------------------------------------- agents */
+.agentgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 14px; margin-bottom: 14px; }
+.agent { position: relative; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; cursor: pointer;
+         box-shadow: var(--shadow); overflow: hidden; transition: transform .15s, border-color .15s; }
+.agent::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--cc); opacity: .9; }
+.agent::after { content: ""; position: absolute; inset: -40% -40% auto auto; width: 200px; height: 200px; border-radius: 50%;
+                background: radial-gradient(closest-side, color-mix(in srgb, var(--cc) 18%, transparent), transparent); pointer-events: none; }
+.agent:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--cc) 45%, transparent); }
+.agent.sel { border-color: var(--cc); box-shadow: 0 0 0 1px var(--cc), var(--shadow); }
 .portrait { position: relative; width: 48px; height: 48px; flex: none; }
-.portrait img.face { width: 48px; height: 48px; border-radius: 8px; border: 2px solid var(--cc); }
+.portrait img.face { width: 48px; height: 48px; border-radius: 12px; border: 2px solid var(--cc); }
 .portrait img.cls { position: absolute; right: -6px; bottom: -6px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--panel); }
-.portrait .lvl { position: absolute; left: -6px; top: -6px; background: var(--panel); border: 1px solid var(--cc); border-radius: 10px; font-size: 11px; padding: 0 5px; font-weight: 600; }
-.agent .nm { font-weight: 600; font-size: 15px; color: var(--text); }
-.bar2 { height: 7px; background: var(--code); border-radius: 4px; overflow: hidden; margin-top: 4px; }
-.bar2 div { height: 100%; }
-.bar2 .hp { background: #2ea043; } .bar2 .xp { background: #8957e5; }
-.minimap { position: relative; margin-top: 8px; border-radius: 6px; overflow: hidden; aspect-ratio: 1024/683; background: var(--code); }
+.portrait .lvl { position: absolute; left: -7px; top: -7px; background: var(--panel); border: 1px solid var(--cc); border-radius: 10px; font-size: 11px; padding: 0 6px; font-weight: 700; }
+.agent .nm { font-weight: 650; font-size: 15px; color: var(--text); }
+.bar2 { height: 6px; background: var(--code); border-radius: 999px; overflow: hidden; margin-top: 6px; }
+.bar2 div { height: 100%; border-radius: 999px; }
+.bar2 .hp { background: linear-gradient(90deg, #22a35a, #3dd68c); } .bar2 .xp { background: linear-gradient(90deg, #7c4ddb, #b48cff); }
+.minimap { position: relative; margin-top: 10px; border-radius: 10px; overflow: hidden; aspect-ratio: 1024/683; background: var(--code); border: 1px solid var(--border); }
 .minimap img, .mapbox img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .dot2 { position: absolute; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: var(--cc); border: 2px solid #000; box-shadow: 0 0 0 3px rgba(255,255,255,.5); }
 .dot2.pulse { animation: pulse 1.6s infinite; }
-@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.7); } 100% { box-shadow: 0 0 0 12px rgba(255,255,255,0); } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,255,255,.7); } 100% { box-shadow: 0 0 0 14px rgba(255,255,255,0); } }
+.restbar { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--panel2); border: 1px dashed var(--border2); font-size: 12px; color: var(--muted); }
 .agent .thought { font-style: italic; color: var(--muted); font-size: 12px; margin-top: 8px; max-height: 4.4em; overflow: hidden; }
-.agdetail { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.3fr) minmax(300px, 1.2fr); gap: 12px; margin-bottom: 12px; }
-@media (max-width: 1100px) { .agdetail { grid-template-columns: 1fr; } }
-.sheethead { display: flex; gap: 14px; align-items: center; }
-.sheethead .portrait, .sheethead .portrait img.face { width: 64px; height: 64px; }
-.sheethead .title { font-size: 18px; font-weight: 600; }
-.statgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
-.stat { background: var(--code); border-radius: 6px; padding: 6px; text-align: center; }
-.stat b { display: block; font-size: 17px; font-variant-numeric: tabular-nums; }
-.stat span { font-size: 11px; color: var(--muted); }
-.paperdoll { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-.slot { display: flex; align-items: center; gap: 6px; font-size: 12px; min-width: 0; }
-.slot img { width: 30px; height: 30px; border-radius: 4px; border: 2px solid var(--qc, #555); flex: none; }
+.agdetail { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(300px, 1.3fr) minmax(300px, 1.2fr); gap: 14px; margin-bottom: 14px; }
+.agdetail > .card { margin-bottom: 0; }
+@media (max-width: 1150px) { .agdetail { grid-template-columns: 1fr; } }
+.agcol h3 { margin-top: 18px; } .agcol h3:first-child { margin-top: 0; }
+.sheethead { display: flex; gap: 16px; align-items: center; }
+.sheethead .portrait, .sheethead .portrait img.face { width: 68px; height: 68px; }
+.sheethead .portrait img.face { border-radius: 16px; }
+.sheethead .title { font-size: 21px; font-weight: 700; letter-spacing: -.02em; }
+.statgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.stat { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 6px; text-align: center; }
+.stat b { display: block; font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.stat span { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.paperdoll { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.slot { display: flex; align-items: center; gap: 8px; font-size: 12px; min-width: 0; padding: 3px; border-radius: 8px; }
+.slot:hover { background: var(--code); }
+.slot img { width: 32px; height: 32px; border-radius: 7px; border: 2px solid var(--qc, #555); flex: none; box-shadow: 0 0 8px color-mix(in srgb, var(--qc, #555) 35%, transparent); }
 .slot a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.slot.empty img { opacity: .25; }
-.questlog div { font-size: 13px; padding: 3px 0; border-bottom: 1px solid var(--border); }
-.mapbox { position: relative; border-radius: 8px; overflow: hidden; aspect-ratio: 1024/683; background: var(--code); }
+.slot.empty img { opacity: .2; box-shadow: none; }
+.questlog div { font-size: 13px; padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; gap: 8px; }
+.questlog div:last-child { border-bottom: 0; }
+.mapbox { position: relative; border-radius: 12px; overflow: hidden; aspect-ratio: 1024/683; background: var(--code); border: 1px solid var(--border); }
 .mapbox svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.mapbox .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
-.journey { display: flex; flex-wrap: wrap; gap: 6px; }
-.journey .stop { background: var(--code); border-radius: 14px; padding: 3px 10px; font-size: 12px; }
-.person { display: flex; justify-content: space-between; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
-.chip { font: inherit; font-size: 12px; padding: 2px 10px; border-radius: 12px; border: 1px solid var(--border); background: none; color: var(--muted); cursor: pointer; }
-.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-.story { max-height: 640px; overflow-y: auto; font-size: 13px; }
-.day { position: sticky; top: 0; background: var(--panel); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; padding: 6px 0 4px; }
-.ev2 { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
-.ev2 img.ic { width: 24px; height: 24px; border-radius: 4px; flex: none; }
+.mapbox .empty, .minimap .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
+.journey { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.journey .stop { background: var(--panel2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; font-size: 12px; }
+.person { display: flex; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
+.chip { font: 500 12px var(--sans); padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border2); background: none; color: var(--muted); cursor: pointer; transition: all .15s; }
+.chip:hover { color: var(--text); border-color: var(--accent); }
+.chip.on { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent; color: #fff; }
+.story { max-height: 640px; overflow-y: auto; font-size: 13px; padding-right: 4px; }
+.day { position: sticky; top: 0; z-index: 1; background: var(--panel); color: var(--faint); font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; padding: 8px 0 5px; }
+.ev2 { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.ev2 img.ic { width: 26px; height: 26px; border-radius: 7px; flex: none; box-shadow: 0 0 0 1px var(--border2); }
 .ev2 .body { min-width: 0; flex: 1; }
-.ev2 .meta { color: var(--muted); font-size: 11px; }
-.bubble { display: inline-block; background: var(--code); border-radius: 12px 12px 12px 2px; padding: 5px 10px; margin-top: 2px; }
+.ev2 .meta { color: var(--faint); font-size: 11px; margin-top: 2px; }
+.bubble { display: inline-block; background: var(--raise); border-radius: 14px 14px 14px 4px; padding: 5px 11px; margin-top: 3px; }
 .ev2.thought .body { color: var(--muted); font-style: italic; }
 .ev2.levelup .body b.k, .ev2.quest .body b.k { color: var(--ok); } .ev2.death .body b.k { color: var(--bad); }
-.agview.active { border-color: var(--accent); color: var(--accent); }
-.persona p { margin: 4px 0; }
-.journal-text { white-space: pre-wrap; font-family: Georgia, "Times New Roman", serif; font-size: 14px; line-height: 1.55; margin-top: 4px; }
-.jentry { padding: 8px 0; border-bottom: 1px solid var(--border); }
-.minimap .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); }
-.help { white-space: pre-wrap; color: var(--muted); font-size: 12px; }
-td.wrap { white-space: normal; }
-a { color: var(--accent); }
-.tag { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--code); color: var(--muted); }
-.modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 50; overflow-y: auto; padding: 24px 16px; display: none; }
-.modal.open { display: block; }
-.modal .inner { max-width: 1400px; margin: 0 auto; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.ev2 b.k { text-transform: capitalize; }
+.agview.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.persona p { margin: 6px 0; }
+.journal-text { white-space: pre-wrap; font-family: Georgia, "Times New Roman", serif; font-size: 14.5px; line-height: 1.65; margin-top: 4px; }
+.jentry { padding: 10px 0; border-bottom: 1px solid var(--border); }
+
+/* ---------------------------------------------------------------- character view */
+.modal { position: fixed; inset: 0; background: rgba(5, 8, 14, .6); backdrop-filter: blur(6px); z-index: 50; overflow-y: auto; padding: 28px 16px; display: none; }
+.modal.open { display: block; animation: fade .2s ease; }
+.modal .inner { max-width: 1440px; margin: 0 auto; background: var(--bg); border: 1px solid var(--border2); border-radius: 18px; padding: 20px;
+                box-shadow: 0 30px 80px rgba(0, 0, 0, .45); }
 .modal .agdetail { margin-bottom: 0; }
-.cvtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-.bagsgrid { display: grid; grid-template-columns: repeat(auto-fill, 36px); gap: 4px; }
-.bagsgrid a { position: relative; display: block; width: 36px; height: 36px; }
-.bagsgrid img { width: 36px; height: 36px; border-radius: 4px; border: 2px solid var(--qc, #555); }
-.bagsgrid span { position: absolute; right: 2px; bottom: 0; font-size: 11px; font-weight: 600; color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000; }
-.skillrow { display: grid; grid-template-columns: 22px 1fr 70px; gap: 6px; align-items: center; font-size: 12px; padding: 2px 0; }
-.skillrow img { width: 20px; height: 20px; border-radius: 3px; }
-.skillrow .bar2 { margin-top: 0; }
-.trees { display: flex; gap: 6px; }
-.autopilot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; }
-.autopilot.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.cvtop { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.bagsgrid { display: grid; grid-template-columns: repeat(auto-fill, 38px); gap: 5px; }
+.bagsgrid a { position: relative; display: block; width: 38px; height: 38px; }
+.bagsgrid img { width: 38px; height: 38px; border-radius: 7px; border: 2px solid var(--qc, #555); transition: transform .1s; }
+.bagsgrid a:hover img { transform: scale(1.08); }
+.bagsgrid span { position: absolute; right: 3px; bottom: 1px; font-size: 11px; font-weight: 700; color: #fff; text-shadow: 0 0 2px #000, 0 0 3px #000; }
+.skillrow { display: grid; grid-template-columns: 22px 1fr 76px; gap: 8px; align-items: center; font-size: 12.5px; padding: 3px 0; }
+.skillrow img { width: 20px; height: 20px; border-radius: 5px; }
+.skillrow .bar2 { margin-top: 3px; }
+.trees { display: flex; gap: 8px; }
 .trees .stat { flex: 1; }
-a.cl { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--muted); cursor: pointer; }
-a.cl:hover { color: var(--accent); }
-#toast { position: fixed; bottom: 16px; right: 16px; left: 16px; max-width: 480px; margin-left: auto; background: var(--panel);
-         border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; display: none; white-space: pre-wrap; }
-#toast.bad { border-color: var(--bad); }
+.autopilot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
+.autopilot.on { border-color: var(--accent); background: linear-gradient(90deg, var(--accent-soft), transparent 70%); }
+
+/* ---------------------------------------------------------------- toast */
+#toast { position: fixed; bottom: 18px; right: 18px; left: 18px; max-width: 460px; margin-left: auto; z-index: 60;
+         background: var(--raise); border: 1px solid var(--border2); border-left: 3px solid var(--ok); border-radius: 12px; padding: 12px 16px;
+         display: none; white-space: pre-wrap; box-shadow: 0 16px 40px rgba(0, 0, 0, .35); animation: fade .2s ease; }
+#toast.bad { border-left-color: var(--bad); }
 </style>
 </head>
 <body>
-<header>
-  <h1>AzerothCore Manager</h1>
+<div class="app">
+<aside class="side">
+  <div class="brand"><div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 17.5 3 6V3h3l11.5 11.5M13 19l6-6M16 16l4 4M19 21l2-2"/></svg></div><div><b>Azeroth Control</b><span>WotLK server dashboard</span></div></div>
   <nav>
-    <button data-tab="overview" class="active">Overview</button>
-    <button data-tab="agents">Agents</button>
-    <button data-tab="activity">Activity</button>
-    <button data-tab="characters">Characters</button>
-    <button data-tab="items">Items</button>
-    <button data-tab="bots">Bots</button>
-    <button data-tab="players">Players</button>
-    <button data-tab="accounts">Accounts</button>
-    <button data-tab="console">Console</button>
-    <button data-tab="logs">Logs</button>
-    <button data-tab="backups">Backups</button>
+    <div class="grp">Monitor</div>
+    <button data-tab="overview" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg><span>Overview</span></button>
+    <button data-tab="agents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/><path d="M19 3v4M17 5h4"/></svg><span>Agents</span></button>
+    <button data-tab="activity"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Activity</span></button>
+    <button data-tab="players"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Players</span></button>
+    <div class="grp">Manage</div>
+    <button data-tab="characters"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Characters</span></button>
+    <button data-tab="items"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg><span>Items</span></button>
+    <button data-tab="bots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg><span>Bots</span></button>
+    <button data-tab="accounts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></svg><span>Accounts</span></button>
+    <div class="grp">System</div>
+    <button data-tab="console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 17 6-6-6-6M12 19h8"/></svg><span>Console</span></button>
+    <button data-tab="logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg><span>Logs</span></button>
+    <button data-tab="backups"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5M3 12a9 3 0 0 0 18 0"/></svg><span>Backups</span></button>
   </nav>
-</header>
+  <div class="sidefoot">
+    <span class="pill" id="srvPill"><span class="dot"></span>checking…</span>
+    <button class="themebtn" id="themeBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg><span>Toggle theme</span></button>
+  </div>
+</aside>
+<div class="content">
+<div class="topbar">
+  <div><h2 id="pageTitle">Overview</h2><div class="sub" id="pageSub"></div></div>
+  <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><input id="gSearch" list="gList" placeholder="Find any character…" autocomplete="off"><datalist id="gList"></datalist></div>
+</div>
 <main>
   <section id="overview" class="active">
     <div class="grid kpis">
-      <div class="card"><h3>World server</h3><div class="big" id="kServer">–</div><div class="muted" id="kServerSub"></div></div>
-      <div class="card"><h3>Players online</h3><div class="big" id="kPlayers">–</div><div class="muted" id="kPlayersSub"></div></div>
-      <div class="card"><h3>Bots online</h3><div class="big" id="kBots">–</div><div class="muted" id="kBotsSub"></div></div>
-      <div class="card"><h3>Server lag</h3><div class="big" id="kLag">–</div><div class="muted" id="kLagSub"></div></div>
-      <div class="card"><h3>LLM chat</h3><div class="big" id="kLlm">–</div><div class="muted" id="kLlmSub"></div></div>
-      <div class="card"><h3>New errors</h3><div class="big" id="kErr">–</div><div class="muted" id="kErrSub">since startup finished</div></div>
+      <div class="card" style="--kc:var(--ok-soft);--ki:var(--ok)"><h3><span class="kic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg></span>World server</h3><div class="big" id="kServer">–</div><div class="muted" id="kServerSub"></div></div>
+      <div class="card" style=""><h3><span class="kic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Players online</h3><div class="big" id="kPlayers">–</div><div class="muted" id="kPlayersSub"></div></div>
+      <div class="card" style="--kc:rgba(167,139,250,.16);--ki:var(--accent2)"><h3><span class="kic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4M8 16h.01M16 16h.01"/></svg></span>Bots online</h3><div class="big" id="kBots">–</div><div class="muted" id="kBotsSub"></div></div>
+      <div class="card" style="--kc:var(--warn-soft);--ki:var(--warn)"><h3><span class="kic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 14 4-4M3.34 19a10 10 0 1 1 17.32 0"/></svg></span>Server lag</h3><div class="big" id="kLag">–</div><div class="muted" id="kLagSub"></div></div>
+      <div class="card" style="--kc:rgba(61,214,200,.14);--ki:#3dd6c8"><h3><span class="kic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>LLM chat</h3><div class="big" id="kLlm">–</div><div class="muted" id="kLlmSub"></div></div>
+      <div class="card" style="--kc:var(--bad-soft);--ki:var(--bad)"><h3><span class="kic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4M12 17h.01"/></svg></span>New errors</h3><div class="big" id="kErr">–</div><div class="muted" id="kErrSub">since startup finished</div></div>
     </div>
     <div class="split">
       <div class="card"><h3>Players online</h3><div class="tablewrap"><table id="ovPlayers"><thead>
@@ -237,11 +425,11 @@ a.cl:hover { color: var(--accent); }
   </section>
 
   <section id="activity">
-    <div class="grid">
-      <div class="card"><h3>Accounts</h3><div class="big" id="actTotal">–</div></div>
-      <div class="card"><h3>Active 24 h</h3><div class="big" id="actDay">–</div></div>
-      <div class="card"><h3>Active 7 days</h3><div class="big" id="actWeek">–</div></div>
-      <div class="card"><h3>Active 30 days</h3><div class="big" id="actMonth">–</div></div>
+    <div class="grid kpis k4">
+      <div class="card"><h3><span class="kic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>Accounts</h3><div class="big" id="actTotal">–</div></div>
+      <div class="card" style="--kc:var(--ok-soft);--ki:var(--ok)"><h3><span class="kic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>Active 24 h</h3><div class="big" id="actDay">–</div></div>
+      <div class="card" style="--kc:rgba(167,139,250,.16);--ki:var(--accent2)"><h3><span class="kic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>Active 7 days</h3><div class="big" id="actWeek">–</div></div>
+      <div class="card" style="--kc:var(--warn-soft);--ki:var(--warn)"><h3><span class="kic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>Active 30 days</h3><div class="big" id="actMonth">–</div></div>
     </div>
     <div class="card"><h3>Logged in now</h3><div id="actOnline"></div></div>
     <div class="card"><h3>All accounts</h3><div class="tablewrap"><table id="actAccounts"><thead>
@@ -254,7 +442,7 @@ a.cl:hover { color: var(--accent); }
       <button class="btn" onclick="viewChar($('#charSel').value)">View character</button>
       <button class="btn" onclick="loadCharacters()">Refresh</button>
       <span class="muted" id="charInfo"></span></div></div>
-    <div class="split">
+    <div class="split wide-left">
       <div class="card"><h3>Alts as party bots</h3>
         <p class="muted" style="margin-top:0">Logs an alt from the same account in as a bot that joins your party. The selected character must be online. <b>Ready up</b> levels the alt to you, learns its spells and gears it, without touching talents or action bars.
           While an alt is in your party it follows you, so its saved location moves with you.</p>
@@ -331,7 +519,7 @@ a.cl:hover { color: var(--accent); }
         <span class="muted">Online: straight into bags. Offline: by mail.</span></div>
     </div>
     <div class="card"><div class="muted" id="itemCountLbl" style="margin-bottom:6px"></div><div class="tablewrap"><table id="itemTable"><thead>
-      <tr><th>Item</th><th>Type</th><th>iLvl</th><th>Req</th><th>Stats</th><th></th></tr></thead><tbody></tbody></table></div></div>
+      <tr><th>Item</th><th>Type</th><th>iLvl</th><th>Req</th><th>Stats</th><th></th></tr></thead><tbody><tr><td colspan="6" class="empty-state">Type a name or pick filters, then search. Tip: <b>Fit to this character</b> finds gear for them.</td></tr></tbody></table></div></div>
   </section>
 
   <section id="bots">
@@ -376,7 +564,7 @@ a.cl:hover { color: var(--accent); }
       <pre id="cmdOut">Commands run from the server console. Commands that need a selected target only work in game.</pre></div>
     <div class="card"><h3>Command reference</h3>
       <div class="row" style="margin-bottom:8px"><input class="grow" id="cmdSearch" placeholder="search commands, e.g. item, tele, learn" autocomplete="off"></div>
-      <div class="tablewrap"><table id="cmdTable"><thead><tr><th>Command</th><th>GM</th><th>Help</th></tr></thead><tbody></tbody></table></div></div>
+      <div class="tablewrap" style="max-height:560px;overflow-y:auto"><table id="cmdTable"><thead><tr><th>Command</th><th>GM</th><th>Help</th></tr></thead><tbody></tbody></table></div></div>
   </section>
 
   <section id="logs">
@@ -394,6 +582,8 @@ a.cl:hover { color: var(--accent); }
       <div class="tablewrap"><table id="backupTable"><thead><tr><th>File</th><th>Size</th><th>Time</th></tr></thead><tbody></tbody></table></div></div>
   </section>
 </main>
+</div>
+</div>
 <div id="toast"></div>
 <div class="modal" id="cv" onclick="if (event.target === this) closeChar()"><div class="inner">
   <div class="cvtop"><div class="sheethead" id="cvHead"></div>
@@ -449,13 +639,40 @@ function since(iso) {
   return Math.floor(s / 86400) + ' d ' + Math.floor(s % 86400 / 3600) + ' h';
 }
 
+// presentation helpers
+const CLASS_COLOR = {Warrior: '#C79C6E', Paladin: '#F58CBA', Hunter: '#ABD473', Rogue: '#FFF569', Priest: '#E8E8E8', 'Death Knight': '#C41F3B',
+                     Shaman: '#2E8FFF', Mage: '#69CCF0', Warlock: '#9482C9', Druid: '#FF7D0A'};
+const CLASS_SLUG = {Warrior: 'warrior', Paladin: 'paladin', Hunter: 'hunter', Rogue: 'rogue', Priest: 'priest', 'Death Knight': 'deathknight',
+                    Shaman: 'shaman', Mage: 'mage', Warlock: 'warlock', Druid: 'druid'};
+// A character name with its class icon and colour; clicking opens the character view.
+function who(name, cls) {
+  const slug = CLASS_SLUG[cls];
+  return `<span class="who">${slug ? `<img src="https://wow.zamimg.com/images/wow/icons/medium/classicon_${slug}.jpg" alt="" title="${esc(cls)}">` : ''}`
+    + `<a class="cl" style="${CLASS_COLOR[cls] ? 'color:' + CLASS_COLOR[cls] : ''}" onclick="viewChar('${esc(name)}')">${esc(name)}</a></span>`;
+}
+const lv = l => `<span class="lv">${l ?? '?'}</span>`;
+const AV_COLORS = ['#6b94ff', '#a78bfa', '#3dd68c', '#f5b84a', '#f7716b', '#3dd6c8', '#ff7dc0', '#9ccc65'];
+function avatar(name) {
+  let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return `<span class="avatar" style="background:${AV_COLORS[h % AV_COLORS.length]}">${esc(String(name).slice(0, 1).toUpperCase())}</span>`;
+}
+const emptyRow = (cols, text) => `<tr><td colspan="${cols}" class="empty-state">${text}</td></tr>`;
+
 // tabs
+const TABS = {
+  overview: ['Overview', 'Server health, players and services at a glance'], agents: ['Agents', 'LLM adventurers living their lives in Azeroth'],
+  activity: ['Activity', 'Who plays, and how much'], players: ['Players', 'Everyone in the world right now'],
+  characters: ['Characters', 'Party bots, gear, levels, spells and teleports'], items: ['Items', 'Search the item database and hand things out'],
+  bots: ['Bots', 'Random bot population and balance'], accounts: ['Accounts', 'Logins, GM levels and passwords'],
+  console: ['Console', 'Run any GM command on the server'], logs: ['Logs', 'Container output'], backups: ['Backups', 'Database dumps']};
 const loaders = {overview: loadStatus, agents: loadAgents, players: loadPlayers, accounts: loadAccounts, backups: loadBackups, logs: loadLogs,
                  activity: loadActivity, characters: () => { loadCharacters(); loadTeles(); }, items: loadCharacters, bots: loadBots, console: loadCommands};
 document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
   document.querySelectorAll('nav button, section').forEach(e => e.classList.remove('active'));
   b.classList.add('active'); $('#' + b.dataset.tab).classList.add('active');
-  try { localStorage.setItem('tab', b.dataset.tab); } catch {}
+  const [title, sub] = TABS[b.dataset.tab] || [b.textContent, ''];
+  $('#pageTitle').textContent = title; $('#pageSub').textContent = sub; document.title = `${title} · Azeroth Control`;
+  try { localStorage.setItem('tab', b.dataset.tab); history.replaceState(null, '', '#/' + b.dataset.tab); } catch {}
   loaders[b.dataset.tab]?.();
 });
 
@@ -463,13 +680,14 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 const kv = rows => rows.map(([k, v]) => `<tr><td class="muted">${esc(k)}</td><td>${v}</td></tr>`).join('');
 const barRows = (rows, key) => { const max = Math.max(1, ...rows.map(r => r.n));
   return rows.map(r => `<tr><td style="width:40%">${esc(r[key])}</td><td style="width:50%"><div class="bar" style="width:${r.n / max * 100}%"></div></td><td>${r.n}</td></tr>`).join(''); };
-const meter = (v, max, unit) => v == null ? '–' : `<div class="meter"><div style="width:${Math.min(100, max ? v / max * 100 : 0)}%"></div></div> ${v}${unit}`;
+const meter = (v, max, unit) => v == null ? '–' : `<div class="meter"><div style="width:${Math.min(100, max ? v / max * 100 : 0)}%"></div></div>`
+  + (unit === ' MB' && v >= 1024 ? `${(v / 1024).toFixed(1)} GB` : `${v}${unit}`);
 async function loadStatus() {
   const d = await api('/api/overview');
   if (!d || !d.services) return;
   const s = d.server, bt = d.bot_totals || {}, llm = d.llm || {};
   $('#kServer').innerHTML = d.world_up ? '<span class="dot ok"></span>Up' : '<span class="dot bad"></span>Down';
-  $('#kServerSub').textContent = d.world_up ? `${s.uptime || ''}` : 'stops after 60 min with no players; starts on login';
+  $('#kServerSub').textContent = d.world_up ? 'up ' + (s.uptime || '').replace(/\s*\d+ second\(s\)/, '').replace(/ day\(s\)/g, ' d').replace(/ hour\(s\)/g, ' h').replace(/ minute\(s\)/g, ' min') : 'stops after 60 min with no players; starts on login';
   $('#kPlayers').textContent = d.players.length;
   $('#kPlayersSub').textContent = `${d.db?.active_week ?? '–'} accounts active this week`;
   $('#kBots').textContent = d.world_up ? (bt.random ?? 0) + (bt.alts ?? 0) : '–';
@@ -481,17 +699,17 @@ async function loadStatus() {
   $('#kErr').textContent = d.errors?.count ?? '–';
   $('#kErrSub').textContent = d.errors?.note || 'since startup finished';
 
-  $('#ovPlayers tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${cl(p.name)}${p.autopilot ? ' <span class="tag" style="color:var(--accent)">autopilot</span>' : ''}</td><td>${p.level} ${esc(p.class)}</td>
+  $('#ovPlayers tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${who(p.name, p.class)}${p.autopilot ? ' <span class="pill accent">autopilot</span>' : ''}</td><td>${lv(p.level)} <span class="muted">${esc(p.class)}</span></td>
     <td>${esc(p.zone)}<div class="muted" style="font-size:12px">${esc(p.map)}</div></td><td>${p.latency} ms</td>
     <td class="wrap">${p.bots.length ? p.bots.map(cl).join(', ') : '<span class="muted">none</span>'}</td></tr>`).join('')
-    : `<tr><td colspan="5" class="muted">${d.world_up ? 'Nobody online.' : 'World server is not running.'}</td></tr>`;
+    : emptyRow(5, d.world_up ? 'Nobody online right now.' : 'World server is resting. It starts when someone logs in.');
 
   $('#services tbody').innerHTML = d.services.map(sv => {
     const cls = sv.status === 'running' ? (sv.health && sv.health !== 'healthy' ? 'warn' : 'ok') : 'bad';
     const ctl = !['ac-worldserver', 'ac-authserver'].includes(sv.name) ? '' : (sv.status === 'running'
       ? `<button class="btn" onclick="svc('${sv.name}','restart',this)">Restart</button> <button class="btn danger" onclick="svc('${sv.name}','stop',this)">Stop</button>`
       : `<button class="btn primary" onclick="svc('${sv.name}','start',this)">Start</button>`);
-    return `<tr><td>${esc(sv.name.replace('ac-', ''))}</td><td><span class="dot ${cls}"></span>${esc(sv.status)}</td><td>${since(sv.started)}</td>
+    return `<tr><td><b>${esc(sv.name.replace('ac-', ''))}</b></td><td><span class="pill ${cls}"><span class="dot ${cls}"></span>${esc(sv.health && sv.health !== 'healthy' ? sv.health : sv.status)}</span></td><td>${since(sv.started)}</td>
       <td>${meter(sv.cpu, 100, '%')}</td><td>${meter(sv.mem_mb, sv.mem_limit_mb, ' MB')}</td><td>${ctl}</td></tr>`;
   }).join('');
 
@@ -534,9 +752,9 @@ $('#announceBtn').onclick = e => { const m = $('#announceMsg').value.trim(); if 
 // players
 async function loadPlayers() {
   const rows = await api('/api/players' + ($('#showBots').checked ? '?bots=1' : ''));
-  $('#playerTable tbody').innerHTML = rows.length ? rows.map(p => `<tr><td>${cl(p.name)}</td><td>${p.level}</td><td>${esc(p.race)}</td>
-    <td>${esc(p.class)}</td><td>${esc(p.zone)}</td><td class="muted">${esc(p.username)}</td><td>${p.is_bot ? '<span class="tag">bot</span>' : ''}</td></tr>`).join('')
-    : '<tr><td colspan="7" class="muted">Nobody online.</td></tr>';
+  $('#playerTable tbody').innerHTML = rows.length ? rows.map(p => `<tr><td>${who(p.name, p.class)}</td><td>${lv(p.level)}</td><td>${esc(p.race)}</td>
+    <td>${esc(p.class)}</td><td>${esc(p.zone)}</td><td class="muted">${esc(p.username)}</td><td>${p.is_bot ? '<span class="tag">bot</span>' : '<span class="pill ok">player</span>'}</td></tr>`).join('')
+    : emptyRow(7, 'Nobody online right now.');
 }
 $('#showBots').onchange = loadPlayers;
 $('#lookupQ').oninput = async () => { const q = $('#lookupQ').value.trim(); if (q.length < 2) return;
@@ -547,7 +765,7 @@ $('#lookupQ').onkeydown = e => { if (e.key === 'Enter') viewChar($('#lookupQ').v
 // accounts
 async function loadAccounts() {
   const rows = await api('/api/accounts');
-  $('#accTable tbody').innerHTML = rows.map(a => `<tr><td>${esc(a.username)}${a.online ? ' <span class="dot ok"></span>' : ''}${a.banned ? ' <span class="tag">banned</span>' : ''}</td>
+  $('#accTable tbody').innerHTML = rows.map(a => `<tr><td>${avatar(a.username)}<b>${esc(a.username)}</b>${a.online ? ' <span class="pill ok">online</span>' : ''}${a.banned ? ' <span class="pill bad">banned</span>' : ''}</td>
     <td><select onchange="setGm('${esc(a.username)}', this)">${[0,1,2,3].map(l => `<option ${l == a.gmlevel ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
     <td>${a.characters}</td><td class="muted">${esc(a.last_login || 'never')}</td><td class="muted">${esc(a.last_ip)}</td>
     <td><button class="btn" onclick="setPw('${esc(a.username)}', this)">Password</button>
@@ -615,7 +833,7 @@ const agentOf = guid => agents.find(a => a.guid === guid);
 function portrait(a, size) {
   const st = a.state || {};
   return `<div class="portrait" style="--cc:${a.visual.color}"><img class="face" src="${a.visual.portrait}" alt="">
-    <img class="cls" src="${a.visual.class_icon}" alt=""><span class="lvl">${st.level || '?'}</span></div>`;
+    <img class="cls" src="${a.visual.class_icon}" alt=""><span class="lvl">${st.level || a.base?.level || '?'}</span></div>`;
 }
 function mapHtml(a, big) {
   const m = a.map;
@@ -669,20 +887,22 @@ async function loadAgents() {
   $('#agToggle').textContent = d.enabled ? 'Pause all agents' : 'Let agents live';
   $('#agToggle').dataset.on = d.enabled ? '1' : '0';
   $('#agInfo').textContent = !d.enabled ? 'Agents are paused by you.'
+    : d.awake === null ? 'Starting up: checking whether the world is running…'
     : d.awake ? 'Living: each makes a life decision every 2-3 minutes; positions update every 20 s.'
     : 'Resting: the world server is stopped (it stops after an hour without players and starts on the next login).';
   $('#agCards').innerHTML = agents.map(a => {
-    const st = a.state || {}, xp = st.xpnext ? Math.round(st.xp / st.xpnext * 100) : 0;
+    const st = a.state || {}, xp = st.xpnext ? Math.round(st.xp / st.xpnext * 100) : 0, bs = a.base || {};
     const status = a.sleeping ? '😴 asleep (logged off)' : a.break_until ? '☕ on a break' : !st.online ? 'offline'
       : !st.alive ? '💀 dead' : st.combat ? '⚔ fighting' : esc(st.area_name || st.zone_name || '');
     return `<div class="agent ${agSel === a.guid ? 'sel' : ''}" style="--cc:${a.visual.color}" onclick="selectAgent(${a.guid})">
       <div class="row" style="gap:12px;align-items:center">${portrait(a)}
         <div style="min-width:0;flex:1"><div class="nm">${esc(a.name)}${a.paused ? ' <span class="tag">paused</span>' : ''}</div>
-          <div class="muted" style="font-size:12px">${esc(st.race || '')} ${esc(st.class || '')} · ${esc(st.faction || '')}</div>
-          <div class="muted" style="font-size:12px">${status}</div></div></div>
+          <div class="muted" style="font-size:12px">${esc(st.race || bs.race || '')} ${esc(st.class || bs.class || '')} · ${esc(st.faction || bs.faction || '')}</div>
+          <div style="font-size:12px;margin-top:2px">${st.online ? `<span class="pill ok">${status}</span>` : `<span class="pill">${status}</span>`}</div></div></div>
       <div class="bar2" title="Health ${st.hp ?? 0}%"><div class="hp" style="width:${st.online ? st.hp : 0}%"></div></div>
       <div class="bar2" title="Experience ${xp}%"><div class="xp" style="width:${xp}%"></div></div>
-      <div class="minimap">${a.sleeping ? '<div class="empty">Asleep</div>' : mapHtml(a, false)}</div>
+      ${st.online ? `<div class="minimap">${mapHtml(a, false)}</div>`
+        : `<div class="restbar">${a.sleeping ? 'Sleeping' : 'Resting'} · last seen in <b>${esc(bs.zone || '?')}</b></div>`}
       <div style="font-size:12px;margin-top:8px"><b>Goal:</b> ${esc(a.goal || '…')}</div>
       <div class="thought">${esc(a.last_thought || 'Not awake yet.')}</div></div>`;
   }).join('');
@@ -846,13 +1066,14 @@ async function loadActivity() {
   const d = await api('/api/activity');
   $('#actTotal').textContent = d.totals.accounts; $('#actDay').textContent = d.totals.day;
   $('#actWeek').textContent = d.totals.week; $('#actMonth').textContent = d.totals.month;
-  $('#actOnline').innerHTML = d.online.length ? d.online.map(a => `<div style="margin-bottom:12px">
-    <strong>${esc(a.username)}</strong> <span class="muted">· ${a.session_min != null ? fmtMin(a.session_min) + ' since login' : ''} · ${esc(a.ip)}</span>
+  $('#actOnline').innerHTML = d.online.length ? d.online.map(a => `<div style="margin-bottom:14px">
+    <div class="row" style="gap:0;margin-bottom:4px">${avatar(a.username)}<strong>${esc(a.username)}</strong>
+      <span class="muted" style="margin-left:10px">${a.session_min != null ? 'online for ' + fmtMin(a.session_min) : ''} · ${esc(a.ip)}</span></div>
     <div class="tablewrap"><table><thead><tr><th>Character</th><th>Level</th><th>Class</th><th>Zone</th><th>Played</th><th>Gold</th></tr></thead><tbody>
-    ${a.characters.map(c => `<tr><td>${cl(c.name)}</td><td>${c.level}</td><td>${esc(c.race)} ${esc(c.class)}</td><td>${esc(c.zone)}</td><td>${c.played_h} h</td><td>${c.gold}</td></tr>`).join('')}
-    </tbody></table></div></div>`).join('') : '<span class="muted">Nobody logged in.</span>';
-  $('#actAccounts tbody').innerHTML = d.accounts.map(a => `<tr><td>${esc(a.username)}</td><td>${a.chars}</td><td>${a.max_level}</td>
-    <td>${a.played_h} h</td><td>${a.gold}</td><td class="muted">${esc(a.last_login || 'never')}</td></tr>`).join('');
+    ${a.characters.map(c => `<tr><td>${who(c.name, c.class)}</td><td>${lv(c.level)}</td><td>${esc(c.race)} ${esc(c.class)}</td><td>${esc(c.zone)}</td><td>${c.played_h} h</td><td><span class="gold">${(+c.gold).toLocaleString()}</span></td></tr>`).join('')}
+    </tbody></table></div></div>`).join('') : '<div class="empty-state">Nobody logged in right now.</div>';
+  $('#actAccounts tbody').innerHTML = d.accounts.map(a => `<tr><td>${avatar(a.username)}<b>${esc(a.username)}</b></td><td>${a.chars}</td><td>${lv(a.max_level)}</td>
+    <td>${a.played_h} h</td><td><span class="gold">${(+a.gold).toLocaleString()}</span></td><td class="muted">${esc(a.last_login || 'never')}</td></tr>`).join('');
 }
 function fmtMin(m) { return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; }
 
@@ -877,21 +1098,22 @@ function renderChar() {
   localSet('char', c.name);
   $('#charInfo').textContent = `${c.race} ${c.class}, ${c.zone}, ${c.gold} gold, account ${c.username}`;
   const alts = chars.filter(x => x.account === c.account && x.name !== c.name);
-  $('#altTable tbody').innerHTML = alts.length ? alts.map(a => `<tr><td>${cl(a.name)}</td><td>${a.level} ${esc(a.class)}</td>
-    <td>${a.online ? '<span class="dot ok"></span>online' : '<span class="muted">offline</span>'}</td>
-    <td class="wrap">${a.online
-      ? `<button class="btn primary" onclick="altReady('${esc(a.name)}',this)" title="Level to ${c.level}, learn spells and skills, autogear up to legendary, sell junk (talents untouched)">Ready up</button>
-         <button class="btn" onclick="altbot('${esc(a.name)}','invite',this)" title="Put into your party / fix the party">Invite</button>
-         <button class="btn" onclick="summon('${esc(a.name)}',this)">Summon</button>
-         <button class="btn" onclick="altLevel('${esc(a.name)}',this)">Level to ${c.level}</button>
-         <button class="btn" onclick="altLearn('${esc(a.name)}',this)">Learn</button>
-         <button class="btn" onclick="altCmd('${esc(a.name)}','autogear',this)">Autogear</button>
-         <button class="btn danger" onclick="altMaintenance('${esc(a.name)}',this)" title="Bot setup: resets and re-picks talents, refills bags">Maintenance</button>
-         <button class="btn" onclick="altCmdPrompt('${esc(a.name)}',this)">Command…</button>
-         <button class="btn danger" onclick="altbot('${esc(a.name)}','remove',this)">Send home</button>`
-      : `<button class="btn primary" onclick="altbot('${esc(a.name)}','add',this)">Join my party</button>
-         <button class="btn" onclick="altLevel('${esc(a.name)}',this)">Level to ${c.level}</button>`}</td></tr>`).join('')
-    : '<tr><td class="muted">No other characters on this account.</td></tr>';
+  $('#altTable tbody').innerHTML = alts.length ? alts.map(a => { const n = esc(a.name);
+    return `<tr><td class="altcell"><div class="althead">${who(a.name, a.class)} ${lv(a.level)} <span class="muted">${esc(a.class)}</span>
+      <span style="flex:1"></span>${a.online ? '<span class="pill ok"><span class="dot ok"></span>in your world</span>' : '<span class="pill">offline</span>'}</div>
+      <div class="altbar">${a.online
+      ? `<div class="bgroup"><button class="btn sm primary" onclick="altReady('${n}',this)" title="Level to ${c.level}, learn spells and skills, autogear up to legendary, sell junk (talents untouched)">Ready up</button>
+           <button class="btn sm" onclick="altbot('${n}','invite',this)" title="Put into your party / fix the party">Invite</button>
+           <button class="btn sm" onclick="summon('${n}',this)">Summon</button></div>
+         <div class="bgroup"><button class="btn sm" onclick="altLevel('${n}',this)">Level to ${c.level}</button>
+           <button class="btn sm" onclick="altLearn('${n}',this)">Learn</button>
+           <button class="btn sm" onclick="altCmd('${n}','autogear',this)">Autogear</button>
+           <button class="btn sm" onclick="altCmdPrompt('${n}',this)">Command…</button></div>
+         <div class="bgroup"><button class="btn sm danger" onclick="altMaintenance('${n}',this)" title="Bot setup: resets and re-picks talents, refills bags">Maintenance</button>
+           <button class="btn sm danger" onclick="altbot('${n}','remove',this)">Send home</button></div>`
+      : `<div class="bgroup"><button class="btn sm primary" onclick="altbot('${n}','add',this)">Join my party</button>
+           <button class="btn sm" onclick="altLevel('${n}',this)">Level to ${c.level}</button></div>`}</div></td></tr>`; }).join('')
+    : emptyRow(1, 'No other characters on this account.');
 }
 $('#charSel').onchange = () => { $('#itemChar').value = $('#charSel').value; renderChar(); };
 $('#itemChar').onchange = () => localSet('char', $('#itemChar').value);
@@ -981,12 +1203,12 @@ async function searchItems() {
   const rows = await api('/api/items?' + q);
   $('#itemCountLbl').textContent = rows.length >= 200 ? 'Showing the first 200 matches; narrow the filters for more.' : `${rows.length} items`;
   $('#itemTable tbody').innerHTML = rows.length ? rows.map(i => `<tr>
-    <td><a class="q${i.Quality}" href="https://www.wowhead.com/wotlk/item=${i.entry}" target="_blank" rel="noopener">${esc(i.name)}</a>
-        <span class="muted">#${i.entry}</span></td>
-    <td class="muted">${esc([i.type, i.slot].filter(Boolean).join(' · '))}</td><td>${i.ItemLevel}</td><td>${i.RequiredLevel || ''}</td>
+    <td><span class="itemcell"><img src="${i.icon}" alt="" style="--qc:${QCOLOR[i.Quality] || '#555'}"><span><a class="q${i.Quality}" href="https://www.wowhead.com/wotlk/item=${i.entry}" target="_blank" rel="noopener"><b>${esc(i.name)}</b></a>
+        <div class="muted" style="font-size:11px">#${i.entry}</div></span></span></td>
+    <td class="muted">${esc([i.type, i.slot].filter(Boolean).join(' · '))}</td><td>${lv(i.ItemLevel)}</td><td>${i.RequiredLevel ? lv(i.RequiredLevel) : ''}</td>
     <td class="wrap muted" style="font-size:12px">${esc(i.stats)}</td>
     <td><button class="btn" onclick="giveItem(${i.entry}, this)">Give</button></td></tr>`).join('')
-    : '<tr><td colspan="6" class="muted">No items found.</td></tr>';
+    : emptyRow(6, 'No items match these filters.');
 }
 $('#itemFit').onclick = () => {
   const c = chars.find(x => x.name === $('#itemChar').value); if (!c) return;
@@ -1009,8 +1231,8 @@ async function loadBots() {
   $('#botSettings').textContent = `${s.MaxRandomBots} random bots online at a time · levels: ${s.SyncLevelWithPlayers === '1' ? 'synced to highest player' : 'level-bracket module (weighted to real players)'}`
     + ` · concentrate in player zones: ${s.RandomBotConcentrateInPlayerZone === '1' ? 'on' : 'off'} · alt auto-login: ${s.BotAutologin === '1' ? 'on' : 'off'}`
     + (d.live ? ' · live figures' : ' · from last save (world server down)');
-  $('#botNear tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${cl(p.name)}</td><td>${p.level}</td><td>${esc(p.zone)}</td>
-    <td>${p.bots_in_zone}</td><td>${p.bots_near_level}</td></tr>`).join('') : '<tr><td colspan="5" class="muted">No real players online.</td></tr>';
+  $('#botNear tbody').innerHTML = d.players.length ? d.players.map(p => `<tr><td>${who(p.name, p.class)}</td><td>${lv(p.level)}</td><td>${esc(p.zone)}</td>
+    <td>${p.bots_in_zone}</td><td>${p.bots_near_level}</td></tr>`).join('') : emptyRow(5, 'No real players online.');
   const bars = (rows, key) => { const max = Math.max(1, ...rows.map(r => r.n));
     return rows.map(r => `<tr><td style="width:40%">${esc(r[key])}</td><td style="width:50%"><div class="bar" style="width:${r.n / max * 100}%"></div></td><td>${r.n}</td></tr>`).join(''); };
   $('#botLevels tbody').innerHTML = bars(d.levels, 'bracket');
@@ -1025,7 +1247,7 @@ $('#botRevive').onclick = e => act(e.target, () => api('/api/bots/revive', {meth
 let cmdTimer;
 async function loadCommands() {
   const rows = await api('/api/commands?q=' + encodeURIComponent($('#cmdSearch').value.trim()));
-  $('#cmdTable tbody').innerHTML = rows.map(c => `<tr><td><a href="#" onclick="$('#cmd').value='${esc(c.name)} ';$('#cmd').focus();scrollTo(0,0);return false">${esc(c.name)}</a></td>
+  $('#cmdTable tbody').innerHTML = rows.map(c => `<tr><td><a href="#" class="cmdlink" onclick="$('#cmd').value='${esc(c.name)} ';$('#cmd').focus();$('#console').scrollIntoView();return false">${esc(c.name)}</a></td>
     <td>${c.security}</td><td class="wrap help">${esc(c.help)}</td></tr>`).join('');
 }
 $('#cmdSearch').oninput = () => { clearTimeout(cmdTimer); cmdTimer = setTimeout(loadCommands, 250); };
@@ -1034,7 +1256,11 @@ $('#cmdSearch').oninput = () => { clearTimeout(cmdTimer); cmdTimer = setTimeout(
 async function loadLogs() {
   const q = new URLSearchParams({lines: $('#logLines').value, filter: $('#logFilter').value});
   const d = await api(`/api/logs/${$('#logSvc').value}?${q}`);
-  const out = $('#logOut'); out.textContent = d.output || '(empty)'; out.scrollTop = out.scrollHeight;
+  const out = $('#logOut');
+  out.innerHTML = (d.output || '(empty)').split('\n').map(l => {
+    const c = /\b(error|fatal|crash|exception|failed)\b/i.test(l) ? 'le' : /\b(warn|warning)\b/i.test(l) ? 'lw' : '';
+    return c ? `<span class="${c}">${esc(l)}</span>` : esc(l); }).join('\n');
+  out.scrollTop = out.scrollHeight;
 }
 $('#logLoad').onclick = loadLogs;
 $('#logFilter').onkeydown = e => { if (e.key === 'Enter') loadLogs(); };
@@ -1042,16 +1268,41 @@ $('#logFilter').onkeydown = e => { if (e.key === 'Enter') loadLogs(); };
 // backups
 async function loadBackups() {
   const rows = await api('/api/backups');
-  $('#backupTable tbody').innerHTML = rows.map(b => `<tr><td>${esc(b.name)}</td><td>${b.size_mb} MB</td><td class="muted">${esc(b.time)}</td></tr>`).join('')
-    || '<tr><td colspan="3" class="muted">No backups yet.</td></tr>';
+  $('#backupTable tbody').innerHTML = (() => { const max = Math.max(1, ...rows.map(b => b.size_mb));
+    return rows.map(b => `<tr><td><b class="cmdlink">${esc(b.name)}</b> ${b.name.startsWith('auto-') ? '<span class="tag">daily</span>' : '<span class="pill accent">manual</span>'}</td>
+      <td><div class="meter"><div style="width:${b.size_mb / max * 100}%"></div></div>${b.size_mb} MB</td>
+      <td>${esc(b.time)} <span class="muted">· ${since(b.time.replace(' ', 'T'))} ago</span></td></tr>`).join(''); })()
+    || emptyRow(3, 'No backups yet.');
 }
 $('#backupBtn').onclick = async e => { e.target.textContent = 'Backing up…'; await act(e.target, () => api('/api/backup', {method: 'POST'})); e.target.textContent = 'Back up databases now'; loadBackups(); };
 
 // Restore the last tab only now that every loader and its state is defined.
 let restored = false;
-try { const t = localStorage.getItem('tab'); const b = t && document.querySelector(`nav button[data-tab="${t}"]`); if (b) { b.click(); restored = true; } } catch {}
+try { const t = location.hash.replace(/^#\/?/, '') || localStorage.getItem('tab'); const b = t && document.querySelector(`nav button[data-tab="${t}"]`); if (b) { b.click(); restored = true; } } catch {}
 if (!restored) loadStatus();
 setInterval(() => { if ($('#overview').classList.contains('active')) loadStatus(); }, 15000);
+
+async function pulse() {
+  const d = await api('/api/pulse');
+  const p = $('#srvPill');
+  if (!d || d.world_up === undefined) return;
+  p.className = 'pill ' + (d.world_up ? 'ok' : 'warn');
+  p.innerHTML = `<span class="dot ${d.world_up ? 'ok' : 'warn'}"></span>` + (d.world_up
+    ? `World up · ${d.players} playing${d.autopilot ? ` (${d.autopilot} on autopilot)` : ''}` : 'World resting');
+}
+pulse(); setInterval(pulse, 20000);
+$('#themeBtn').onclick = () => {
+  const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = t; try { localStorage.setItem('theme', t); } catch {}
+};
+let gTimer;
+$('#gSearch').oninput = () => { clearTimeout(gTimer); gTimer = setTimeout(async () => {
+  const q = $('#gSearch').value.trim(); if (q.length < 2) return;
+  const rows = await api('/api/character/search?q=' + encodeURIComponent(q));
+  if (Array.isArray(rows)) $('#gList').innerHTML = rows.map(r => `<option value="${esc(r.name)}">${r.level} ${esc(r.class)}${r.bot ? ' · bot' : ''}</option>`).join('');
+}, 200); };
+$('#gSearch').onkeydown = e => { if (e.key === 'Enter' && $('#gSearch').value.trim()) { viewChar($('#gSearch').value.trim()); $('#gSearch').value = ''; } };
+$('#gSearch').onchange = () => { const v = $('#gSearch').value.trim(); if (v && [...$('#gList').options].some(o => o.value === v)) { viewChar(v); $('#gSearch').value = ''; } };
 </script>
 </body>
 </html>

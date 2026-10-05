@@ -341,6 +341,15 @@ def api_status():
     return jsonify(services=services, players=players)
 
 
+@app.get("/api/pulse")
+@requires_auth
+def api_pulse():
+    """Cheap heartbeat for the sidebar: is the world up and how many people are playing."""
+    who = live_who()
+    return jsonify(world_up=who is not None, players=len(who[0]) if who else 0,
+                   autopilot=sum(who[0].values()) if who else 0)
+
+
 @app.get("/api/llm")
 @requires_auth
 def api_llm():
@@ -1007,7 +1016,7 @@ def api_items():
     order = ITEM_SORTS.get(a.get("sort", ""), ITEM_SORTS["ilvl"])
     stat_cols = ", ".join(f"stat_type{i}, stat_value{i}" for i in range(1, 11))
     rows = query(
-        f"SELECT entry, name, class, subclass, Quality, ItemLevel, RequiredLevel, InventoryType, armor, "
+        f"SELECT entry, name, class, subclass, Quality, ItemLevel, RequiredLevel, InventoryType, armor, displayid, "
         f"       dmg_min1, dmg_max1, delay, {stat_cols} "
         f"FROM acore_world.item_template WHERE {' AND '.join(where)} ORDER BY {order} LIMIT 200", args)
     out = []
@@ -1032,7 +1041,8 @@ def api_items():
         out.append({"entry": r["entry"], "name": r["name"], "Quality": r["Quality"],
                     "ItemLevel": r["ItemLevel"], "RequiredLevel": r["RequiredLevel"],
                     "slot": SLOTS.get(r["InventoryType"], ""), "type": kind_name,
-                    "stats": ", ".join(extra + stats)})
+                    "stats": ", ".join(extra + stats),
+                    "icon": ICON_URL.format(size="medium", name=ITEM_ICONS.get(r["displayid"], "inv_misc_questionmark"))})
     return jsonify(out)
 
 
@@ -1064,7 +1074,7 @@ def api_bots():
             near = []
             for p in players:
                 band = sum(n for lvl, n in levels.items() if abs(lvl - p["level"]) <= 5)
-                near.append({"name": p["name"], "level": p["level"], "zone": p["zone"],
+                near.append({"name": p["name"], "level": p["level"], "zone": p["zone"], "class": p.get("class"),
                              "bots_in_zone": zones.get(p["zone_id"], 0), "bots_near_level": band})
             settings = {k: read_conf_value(PLAYERBOTS_CONF, f"AiPlayerbot.{k}") for k in
                         ("MaxRandomBots", "SyncLevelWithPlayers", "RandomBotConcentrateInPlayerZone", "BotAutologin")}
@@ -1387,7 +1397,7 @@ def api_agents():
     for r in levels:
         history.setdefault(r["guid"], []).append({"ts": _iso(r["ts"]), "level": r["level"] or 1})
     chars = {c["guid"]: c for c in query(
-        "SELECT guid, race, class, gender FROM acore_characters.characters WHERE guid IN "
+        "SELECT guid, race, class, gender, level, zone FROM acore_characters.characters WHERE guid IN "
         "(SELECT guid FROM acore_characters.dash_agents)")}
     counts = {}
     for c in query("SELECT guid, kind, COUNT(*) AS n, COUNT(DISTINCT zone) AS z FROM acore_characters.dash_agent_events "
@@ -1419,9 +1429,11 @@ def api_agents():
                  "levelups": c.get("levelup", 0), "chats": c.get("chat", 0) + c.get("say", 0),
                  "thoughts": c.get("thought", 0), "letters": c.get("letter", 0), "journals": c.get("journal", 0),
                  "convos": c.get("convo", 0)}
-        out.append({**{k: _iso(v) for k, v in r.items() if k != "persona"}, "persona": persona, "state": st,
+        base = {"level": ch.get("level"), "race": RACES.get(race, ""), "class": CLASSES.get(cls, ""),
+                "faction": "Alliance" if race in (1, 3, 4, 7, 11) else "Horde", "zone": zone_name(ch.get("zone") or 0)}
+        out.append({**{k: _iso(v) for k, v in r.items() if k != "persona"}, "persona": persona, "state": st, "base": base,
                     "visual": visual, "map": mp, "stats": stats, "level_history": history.get(r["guid"], [])})
-    return jsonify(enabled=agent_runner.enabled(), awake=bool(agent_runner.world_awake), agents=out)
+    return jsonify(enabled=agent_runner.enabled(), awake=agent_runner.world_awake, agents=out)
 
 
 EQUIP_SLOTS = ["Head", "Neck", "Shoulder", "Shirt", "Chest", "Waist", "Legs", "Feet", "Wrist", "Hands",
