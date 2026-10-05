@@ -1575,7 +1575,8 @@ def api_character_search():
     if len(q) < 2:
         return jsonify([])
     rows = query("SELECT c.name, c.level, c.class, a.username LIKE 'RNDBOT%%' AS bot FROM acore_characters.characters c "
-                 "JOIN acore_auth.account a ON a.id = c.account WHERE c.name LIKE %s ORDER BY bot, c.name LIMIT 25",
+                 "JOIN acore_auth.account a ON a.id = c.account WHERE c.name COLLATE utf8mb4_general_ci LIKE %s "
+                 "ORDER BY bot, c.name LIMIT 25",
                  (q.replace("%", "").replace("_", "") + "%",))
     return jsonify([{**r, "class": CLASSES.get(r["class"], "?"), "bot": bool(r["bot"])} for r in rows])
 
@@ -1585,10 +1586,12 @@ def api_character_search():
 def api_character_view(name):
     """Everything about one character, for anyone on the server (players, alts, random bots, agents)."""
     rows = query("SELECT c.*, a.username FROM acore_characters.characters c "
-                 "JOIN acore_auth.account a ON a.id = c.account WHERE c.name = %s", (name,))
+                 "JOIN acore_auth.account a ON a.id = c.account WHERE c.name COLLATE utf8mb4_general_ci = %s "
+                 "ORDER BY c.name = %s DESC LIMIT 1", (name, name))
     if not rows:
         return jsonify(error="No such character"), 404
     c = rows[0]
+    name = c["name"]  # the stored spelling; the lookup ignores case
     guid, race, cls = c["guid"], c["race"], c["class"]
     is_rndbot = c["username"].upper().startswith("RNDBOT")
     agent = query("SELECT guid FROM acore_characters.dash_agents WHERE guid = %s", (guid,))

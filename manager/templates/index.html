@@ -995,6 +995,7 @@ async function viewChar(name) {
   const d = await api(`/api/character/${encodeURIComponent(name)}/view`);
   if (cvName !== name) return;
   if (d.error) { $('#cvHead').innerHTML = `<div class="title">${esc(name)}</div><span class="muted">${esc(d.error)}</span>`; return; }
+  if (d.info.name !== name) { cvName = name = d.info.name; }
   const i = d.info, a = {visual: d.visual, map: d.map, state: {level: i.level, online: i.online}};
   const where = i.online ? (i.area && i.area !== i.zone ? i.area + ', ' : '') + i.zone : `last seen in ${i.zone}${i.last_logout ? ' · ' + since(i.last_logout.replace(' ', 'T')) + ' ago' : ''}`;
   $('#cvHead').innerHTML = `${portrait(a)}<div><div class="title" style="color:${d.visual.color}">${esc(i.name)} <span class="tag">${esc(i.kind)}</span></div>
